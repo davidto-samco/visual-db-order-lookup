@@ -1,0 +1,425 @@
+# BOMService API Contract
+# Visual Database Multi-Module Application - Engineering Module
+# Date: 2025-11-07
+
+service_name: BOMService
+description: |
+  Provides Bill of Materials hierarchy queries for the Engineering Module.
+  Retrieves job-based BOM structures with lazy loading support for large
+  assemblies (700+ work orders). All operations are read-only.
+
+database_tables:
+  - WORK_ORDER (BOM hierarchy storage)
+  - PART (part master data, material codes, type flags)
+  - CUSTOMER_ORDER (job header information)
+  - CUSTOMER (customer references)
+
+global_settings:
+  query_timeout_seconds: 30
+  connection_type: read_only
+  error_handling: return_empty_list_on_not_found
+
+methods:
+  # =====================================================================
+  # Method: get_bom_hierarchy
+  # =====================================================================
+  get_bom_hierarchy:
+    description: |
+      Retrieves complete Bill of Materials hierarchy for a specific job.
+      Returns all work orders with part information, hierarchically organized
+      by LOT_ID (assembly) and SUB_ID (component sequence).
+
+      For large jobs (700+ work orders), consider using get_bom_assemblies()
+      first and lazy-loading parts per assembly via get_assembly_parts().
+
+    input_parameters:
+      job_number:
+        type: string
+        required: true
+        max_length: 20
+        description: Job number (BASE_ID in WORK_ORDER table)
+        validation:
+          - non_empty: true
+          - trim_whitespace: true
+        examples:
+          - "8113"  # Large job: 702 work orders, 15 assemblies
+          - "8059"  # Small job: 33 work orders, 4 assemblies
+
+    output:
+      type: List[BOMNode]
+      description: |
+        Returns complete BOM hierarchy as flat list of BOMNode objects.
+        Nodes include depth and parent_key for tree construction.
+        Ordered by LOT_ID (assembly), then SUB_ID (component sequence).
+        Returns empty list if job not found or has no work orders.
+
+      schema:
+        BOMNode:
+          job_number: string
+          lot_id: string
+          sub_id: string
+          base_lot_id: string  # Format: "JOB/LOT" (e.g., "8113/26")
+          part_id: string | null
+          description: string | null
+          drawing_id: string | null
+          drawing_revision: string | null
+          quantity: Decimal | null
+          material_code: string | null
+          node_type: string  # 'A' (assembly), 'M' (manufactured), 'P' (purchased), 'O' (other)
+          is_assembly: boolean
+          is_manufactured: boolean
+          is_purchased: boolean
+          depth: int  # Tree depth (0=root, 1=assembly, 2+=parts)
+          parent_key: string | null  # Parent LOT_ID for hierarchy building
+          is_loaded: boolean  # Used for lazy loading (always true for this method)
+
+    errors:
+      - error_code: CONNECTION_ERROR
+        description: Database connection failed or lost
+        user_message: "Could not connect to Visual database. Please check network connection."
+
+      - error_code: TIMEOUT_ERROR
+        description: Query exceeded 30 second timeout (likely large job)
+        user_message: "BOM query timed out. Try using lazy loading for large jobs."
+
+      - error_code: INVALID_INPUT
+        description: Job number exceeds max length or is empty
+        user_message: "Invalid job number. Job numbers must be 1-20 characters."
+
+      - error_code: JOB_NOT_FOUND
+        description: No work orders found for specified job number
+        user_message: "No BOM found for job number '{job_number}'."
+
+    database_query: |
+      SELECT
+          wo.BASE_ID AS job_number,
+          wo.LOT_ID,
+          wo.SUB_ID,
+          wo.BASE_ID + '/' + wo.LOT_ID AS base_lot_id,
+          wo.PART_ID,
+          wo.DRAWING_ID,
+          wo.DRAWING_REV_NO,
+          wo.DESIRED_QTY,
+          p.DESCRIPTION,
+          p.MATERIAL_CODE,
+          CASE
+              WHEN p.FABRICATED = 'Y' AND p.PURCHASED <> 'Y' THEN 'M'
+              WHEN p.PURCHASED = 'Y' THEN 'P'
+              WHEN p.FABRICATED = 'Y' THEN 'A'
+              ELSE 'O'
+          END AS node_type
+      FROM WORK_ORDER wo WITH (NOLOCK)
+      LEFT JOIN PART p WITH (NOLOCK) ON wo.PART_ID = p.ID
+      WHERE wo.BASE_ID = ?
+          AND wo.TYPE = 'W'
+          AND wo.PART_ID IS NOT NULL
+      ORDER BY wo.LOT_ID, CAST(wo.SUB_ID AS INT)
+
+    performance:
+      expected_execution_time:
+        small_job: <500ms (33 work orders)
+        large_job: 5-10s (700+ work orders)
+      expected_result_count: 30-700+ records
+      index_usage: WORK_ORDER.BASE_ID index required
+
+    lazy_loading_note: |
+      For large jobs (>100 work orders), consider using get_bom_assemblies()
+      to load only top-level assemblies, then lazy-load parts using
+      get_assembly_parts() when user expands an assembly node.
+
+    example_usage: |
+      # Python example - Full BOM load (small jobs)
+      bom_nodes = bom_service.get_bom_hierarchy("8059")
+      print(f"Loaded {len(bom_nodes)} BOM nodes")
+
+      # Build tree structure
+      for node in bom_nodes:
+          indent = "  " * node.depth
+          color = node.color_code  # 'blue', 'black', 'red'
+          print(f"{indent}{node.base_lot_id} - {node.description} [{color}]")
+
+  # =====================================================================
+  # Method: get_bom_assemblies
+  # =====================================================================
+  get_bom_assemblies:
+    description: |
+      Retrieves only top-level assemblies for a job (distinct LOT_IDs).
+      Used for lazy loading: load assemblies collapsed, then expand
+      individual assemblies on demand using get_assembly_parts().
+
+      This method is optimized for large jobs (700+ work orders) where
+      loading the full hierarchy upfront would be slow.
+
+    input_parameters:
+      job_number:
+        type: string
+        required: true
+        max_length: 20
+        description: Job number (BASE_ID in WORK_ORDER table)
+        validation:
+          - non_empty: true
+          - trim_whitespace: true
+        examples:
+          - "8113"  # Returns 15 assemblies
+
+    output:
+      type: List[BOMNode]
+      description: |
+        Returns list of BOMNode objects representing top-level assemblies only.
+        Each assembly has is_loaded=False to indicate children not yet loaded.
+        Ordered by LOT_ID ascending.
+
+      schema:
+        BOMNode:
+          # Same schema as get_bom_hierarchy, but only assembly headers
+          # is_loaded is set to False (children need lazy loading)
+
+    errors:
+      - error_code: CONNECTION_ERROR
+        description: Database connection failed or lost
+        user_message: "Could not connect to Visual database. Please check network connection."
+
+      - error_code: TIMEOUT_ERROR
+        description: Query exceeded 30 second timeout
+        user_message: "Assembly query timed out. Please try again."
+
+      - error_code: INVALID_INPUT
+        description: Job number exceeds max length or is empty
+        user_message: "Invalid job number. Job numbers must be 1-20 characters."
+
+      - error_code: JOB_NOT_FOUND
+        description: No work orders found for specified job number
+        user_message: "No BOM found for job number '{job_number}'."
+
+    database_query: |
+      SELECT DISTINCT
+          wo.BASE_ID AS job_number,
+          wo.LOT_ID,
+          '0' AS sub_id,
+          wo.BASE_ID + '/' + wo.LOT_ID AS base_lot_id,
+          NULL AS part_id,
+          'Assembly ' + wo.LOT_ID AS description,
+          NULL AS drawing_id,
+          NULL AS drawing_revision,
+          NULL AS quantity,
+          NULL AS material_code,
+          'A' AS node_type,
+          1 AS is_assembly,
+          0 AS is_manufactured,
+          0 AS is_purchased,
+          1 AS depth,
+          NULL AS parent_key,
+          0 AS is_loaded
+      FROM WORK_ORDER wo WITH (NOLOCK)
+      WHERE wo.BASE_ID = ? AND wo.TYPE = 'W'
+      ORDER BY wo.LOT_ID
+
+    performance:
+      expected_execution_time: <100ms
+      expected_result_count: 1-20 assemblies (typical)
+
+    example_usage: |
+      # Python example - Lazy loading pattern
+      assemblies = bom_service.get_bom_assemblies("8113")
+      print(f"Job has {len(assemblies)} assemblies")
+
+      # Display collapsed tree
+      for assembly in assemblies:
+          tree_item = create_tree_item(assembly)
+          tree_item.add_dummy_child()  # Show expand arrow
+
+      # When user expands assembly, load parts:
+      def on_assembly_expanded(assembly_node):
+          if not assembly_node.is_loaded:
+              parts = bom_service.get_assembly_parts(
+                  assembly_node.job_number,
+                  assembly_node.lot_id
+              )
+              for part in parts:
+                  assembly_node.add_child(create_tree_item(part))
+              assembly_node.is_loaded = True
+
+  # =====================================================================
+  # Method: get_assembly_parts
+  # =====================================================================
+  get_assembly_parts:
+    description: |
+      Retrieves all parts for a specific assembly within a job.
+      Used for lazy loading: when user expands an assembly node in the
+      BOM tree, load only that assembly's parts instead of entire hierarchy.
+
+    input_parameters:
+      job_number:
+        type: string
+        required: true
+        max_length: 20
+        description: Job number (BASE_ID in WORK_ORDER table)
+        validation:
+          - non_empty: true
+          - trim_whitespace: true
+
+      lot_id:
+        type: string
+        required: true
+        max_length: 6
+        description: Assembly identifier (LOT_ID in WORK_ORDER table)
+        validation:
+          - non_empty: true
+          - trim_whitespace: true
+        examples:
+          - "26"   # Assembly 26 from job 8113 (330+ parts)
+          - "41"   # Assembly 41 from job 8113
+
+    output:
+      type: List[BOMNode]
+      description: |
+        Returns list of BOMNode objects for all parts in the specified assembly.
+        Ordered by SUB_ID (component sequence).
+        Returns empty list if assembly not found or has no parts.
+
+      schema:
+        BOMNode:
+          # Same schema as get_bom_hierarchy
+          # depth is set to 2 (parts under assembly)
+          # parent_key is set to lot_id
+
+    errors:
+      - error_code: CONNECTION_ERROR
+        description: Database connection failed or lost
+        user_message: "Could not connect to Visual database. Please check network connection."
+
+      - error_code: TIMEOUT_ERROR
+        description: Query exceeded 30 second timeout
+        user_message: "Assembly parts query timed out. Assembly may be very large."
+
+      - error_code: INVALID_INPUT
+        description: Job number or lot_id exceeds max length or is empty
+        user_message: "Invalid job number or assembly identifier."
+
+    database_query: |
+      SELECT
+          wo.BASE_ID AS job_number,
+          wo.LOT_ID,
+          wo.SUB_ID,
+          wo.BASE_ID + '/' + wo.LOT_ID AS base_lot_id,
+          wo.PART_ID,
+          wo.DRAWING_ID,
+          wo.DRAWING_REV_NO,
+          wo.DESIRED_QTY,
+          p.DESCRIPTION,
+          p.MATERIAL_CODE,
+          CASE
+              WHEN p.FABRICATED = 'Y' AND p.PURCHASED <> 'Y' THEN 'M'
+              WHEN p.PURCHASED = 'Y' THEN 'P'
+              WHEN p.FABRICATED = 'Y' THEN 'A'
+              ELSE 'O'
+          END AS node_type
+      FROM WORK_ORDER wo WITH (NOLOCK)
+      LEFT JOIN PART p WITH (NOLOCK) ON wo.PART_ID = p.ID
+      WHERE wo.BASE_ID = ?
+          AND wo.LOT_ID = ?
+          AND wo.TYPE = 'W'
+          AND wo.PART_ID IS NOT NULL
+          AND CAST(wo.SUB_ID AS INT) >= 2
+      ORDER BY CAST(wo.SUB_ID AS INT)
+
+    performance:
+      expected_execution_time: 100-300ms (depends on assembly size)
+      expected_result_count: 1-350 parts per assembly
+      index_usage: WORK_ORDER.(BASE_ID, LOT_ID) composite index recommended
+
+    example_usage: |
+      # Python example - Load assembly 26 parts
+      parts = bom_service.get_assembly_parts("8113", "26")
+      print(f"Assembly 26 has {len(parts)} parts")
+
+      for part in parts:
+          print(f"  {part.base_lot_id}/{part.sub_id}: {part.description}")
+          print(f"    Material: {part.material_code or 'N/A'}")
+          print(f"    Type: {part.node_type}")
+
+# =====================================================================
+# Service Implementation Notes
+# =====================================================================
+implementation_notes:
+  threading:
+    description: |
+      All methods should be executed in a background thread (DatabaseWorker pattern).
+      Large BOM queries (get_bom_hierarchy for 700+ work orders) MUST use
+      background threads to prevent UI freezing for 5-10 seconds.
+
+  lazy_loading_strategy:
+    description: |
+      Recommended workflow for large jobs:
+      1. Call get_bom_assemblies() to load top-level assemblies (<100ms)
+      2. Display assemblies in collapsed state in QTreeWidget
+      3. Connect QTreeWidget.itemExpanded signal to lazy load handler
+      4. On expand: Call get_assembly_parts() for that assembly (100-300ms)
+      5. Add parts as children to expanded assembly node
+
+      For small jobs (<100 work orders), get_bom_hierarchy() can load all at once.
+
+  tree_construction:
+    description: |
+      BOMNode.depth and parent_key fields are provided to support tree building:
+      - depth=0: Job root (not returned by queries, UI creates this)
+      - depth=1: Assembly headers (LOT_IDs)
+      - depth=2+: Parts within assemblies
+      - parent_key: LOT_ID of parent assembly (used to attach parts to assemblies)
+
+  color_coding:
+    description: |
+      Use BOMNode.node_type to determine display color:
+      - 'A' (assembly): Blue text (visible on white background)
+      - 'M' (manufactured): Black text
+      - 'P' (purchased): Red text
+      - 'O' (other): Gray text
+
+      Apply color using QTreeWidgetItem.setForeground() for all columns.
+
+  performance_monitoring:
+    description: |
+      Log query execution times. If get_bom_hierarchy() exceeds 5 seconds,
+      show warning to user suggesting they use lazy loading for large jobs.
+
+# =====================================================================
+# Test Data
+# =====================================================================
+test_data:
+  valid_jobs:
+    - job_number: "8113"
+      description: "Large job - 702 work orders, 15 assemblies"
+      expected_assemblies: 15
+      expected_total_nodes: 702
+      largest_assembly:
+        lot_id: "26"
+        expected_parts: ">330"
+        description: "Roll former assembly"
+
+    - job_number: "8059"
+      description: "Small job - 33 work orders, 4 assemblies"
+      expected_assemblies: 4
+      expected_total_nodes: 33
+
+  invalid_jobs:
+    - job_number: "99999"
+      expected_result: empty_list
+      expected_error: JOB_NOT_FOUND
+
+    - job_number: ""
+      expected_error: INVALID_INPUT
+
+  lazy_loading_scenario:
+    description: "Load job 8113 using lazy loading pattern"
+    steps:
+      - action: "get_bom_assemblies('8113')"
+        expected_result: "15 assemblies, is_loaded=False"
+        expected_time: "<100ms"
+
+      - action: "get_assembly_parts('8113', '26')"
+        expected_result: "330+ parts"
+        expected_time: "<300ms"
+
+      - action: "get_assembly_parts('8113', '41')"
+        expected_result: "Multiple parts"
+        expected_time: "<300ms"

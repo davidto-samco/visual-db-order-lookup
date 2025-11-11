@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# PyInstaller
+*.manifest
+# Allow our main spec file
+!visual-order-lookup.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Environment files
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Claude Code local settings
+.claude/settings.local.json
+.context/
+
+# Development/exploration scripts
+scripts/database_exploration/
+
+# Logs
+*.log
+
+# Database
+*.db
+*.sqlite
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini

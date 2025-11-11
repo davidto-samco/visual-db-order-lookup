@@ -1,0 +1,14 @@
+# Visual Database Order Lookup - Production Dependencies
+# Python 3.11+ required
+
+# GUI Framework
+PyQt6>=6.6.0
+
+# Database Connectivity
+pyodbc>=5.3.0
+
+# Configuration Management
+python-dotenv>=1.0.0
+
+# Template Engine for Reports
+Jinja2>=3.1.2

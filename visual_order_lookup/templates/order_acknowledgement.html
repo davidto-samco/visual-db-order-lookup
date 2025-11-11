@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Order Acknowledgement - {{ order.order_id }}</title>
+    <style>
+        @page {
+            size: letter;
+            margin: 0.5in;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            margin: 0;
+            padding: 20px;
+            color: #000;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .logo {
+            font-size: 32pt;
+            font-weight: bold;
+            font-family: 'Arial Black', sans-serif;
+            font-style: italic;
+        }
+        .company-info {
+            font-size: 18pt;
+            font-weight: bold;
+        }
+        .iso-badge {
+            text-align: center;
+            border: 2px solid black;
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+        }
+        .iso-text {
+            font-size: 9pt;
+        }
+        .doc-title {
+            text-align: center;
+            font-size: 14pt;
+            font-weight: bold;
+            margin: 20px 0;
+            border-top: 2px solid black;
+            border-bottom: 2px solid black;
+            padding: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        .info-table td {
+            border: 1px solid black;
+            padding: 5px;
+            font-size: 9pt;
+        }
+        .info-table .label {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            width: 40%;
+        }
+        .section-title {
+            font-weight: bold;
+            background-color: #f0f0f0;
+            padding: 5px;
+            margin-top: 15px;
+            margin-bottom: 5px;
+        }
+        .items-table {
+            font-size: 9pt;
+        }
+        .items-table th {
+            background-color: #f0f0f0;
+            border: 1px solid black;
+            padding: 5px;
+            font-weight: bold;
+            text-align: left;
+        }
+        .items-table td {
+            border: 1px solid black;
+            padding: 5px;
+            vertical-align: top;
+        }
+        .items-table .line-no {
+            text-align: center;
+            width: 40px;
+        }
+        .items-table .base-lot {
+            width: 100px;
+        }
+        .items-table .price {
+            text-align: right;
+            width: 100px;
+        }
+        .total-row {
+            font-weight: bold;
+            text-align: right;
+            margin-top: 10px;
+        }
+        .address-table {
+            width: 48%;
+            display: inline-block;
+            vertical-align: top;
+        }
+        .address-box {
+            border: 1px solid black;
+            padding: 10px;
+            min-height: 100px;
+        }
+        .na {
+            color: #999;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header with SAMCO logo and ISO 9001 badge -->
+    <div class="header">
+        <div>
+            <div class="logo">SAMCO</div>
+            <div class="company-info">Machinery Limited</div>
+        </div>
+        <div class="iso-badge">
+            <img src="file:///{{ logo_path }}" alt="ISO 9001" style="width: 60px; height: 60px; margin-bottom: 5px;">
+            <div style="font-size: 11pt; font-weight: bold;">{{ order.order_id }}</div>
+            <div class="iso-text">{{ order.customer.customer_id if order.customer else 'CUSTOM' }}</div>
+        </div>
+    </div>
+
+    <!-- Document title -->
+    <div class="doc-title">CUSTOMER ORDER ACKNOWLEDGEMENT</div>
+
+    <!-- Order information table -->
+    <table class="info-table">
+        <tr>
+            <td class="label">CUSTOMER</td>
+            <td>{{ order.customer.name if order.customer else 'N/A' }}</td>
+            <td class="label">QUOTE ID</td>
+            <td>{{ order.quote_id|default('N/A', true) }}</td>
+        </tr>
+        <tr>
+            <td class="label">PAYMENT TERMS</td>
+            <td>{{ order.payment_terms }}</td>
+            <td class="label">REVISION DATE</td>
+            <td>{{ order.revision_date.strftime('%m/%d/%Y') if order.revision_date else 'N/A' }}</td>
+        </tr>
+        <tr>
+            <td class="label">CUSTOMER P.O.</td>
+            <td>{{ order.customer_po_ref|default('N/A', true) }}</td>
+            <td class="label">REVISION #</td>
+            <td>{{ order.revision_number if order.revision_number else 'N/A' }}</td>
+        </tr>
+        <tr>
+            <td class="label">BUYER'S NAME</td>
+            <td>{{ order.contact_name|default('N/A', true) }}</td>
+            <td class="label">ORDER DATE</td>
+            <td>{{ order.order_date.strftime('%m/%d/%Y') }}</td>
+        </tr>
+        <tr>
+            <td class="label">CONTACT PHONE #</td>
+            <td>{{ order.contact_phone|default('N/A', true) }}</td>
+            <td class="label">CONTACT FAX #</td>
+            <td>{{ order.contact_fax|default('N/A', true) }}</td>
+        </tr>
+        <tr>
+            <td class="label">ESTIMATED FACTORY ACCEPTANCE TEST DATE</td>
+            <td colspan="3">{{ order.formatted_factory_acceptance_date() }}</td>
+        </tr>
+        <tr>
+            <td class="label">SALES REP</td>
+            <td>{{ order.sales_rep|default('N/A', true) }}</td>
+            <td class="label">FIRMED FACTORY ACCEPTANCE TEST DATE</td>
+            <td>{{ order.factory_acceptance_date_firmed.strftime('%m/%d/%Y') if order.factory_acceptance_date_firmed else 'N/A' }}</td>
+        </tr>
+    </table>
+
+    <!-- Side-by-side addresses -->
+    <div style="margin-top: 20px;">
+        {% if order.customer %}
+        <div class="address-table" style="margin-right: 4%;">
+            <div class="section-title">Bill To</div>
+            <div class="address-box">
+                {{ order.customer.bill_to_name|default(order.customer.name, true) }}<br>
+                {% if order.customer.bill_to_address_1 %}{{ order.customer.bill_to_address_1 }}<br>{% endif %}
+                {% if order.customer.bill_to_address_2 %}{{ order.customer.bill_to_address_2 }}<br>{% endif %}
+                {% if order.customer.bill_to_address_3 %}{{ order.customer.bill_to_address_3 }}<br>{% endif %}
+                {% if order.customer.bill_to_city or order.customer.bill_to_state or order.customer.bill_to_zip_code %}
+                {{ order.customer.bill_to_city }}{% if order.customer.bill_to_city and order.customer.bill_to_state %}, {% endif %}{{ order.customer.bill_to_state }} {{ order.customer.bill_to_zip_code }}<br>
+                {% endif %}
+                {% if order.customer.bill_to_country %}{{ order.customer.bill_to_country }}{% endif %}
+            </div>
+        </div>
+        <div class="address-table">
+            <div class="section-title">Ship To</div>
+            <div class="address-box">
+                {{ order.customer.name }}<br>
+                {% if order.customer.address_1 %}{{ order.customer.address_1 }}<br>{% endif %}
+                {% if order.customer.address_2 %}{{ order.customer.address_2 }}<br>{% endif %}
+                {% if order.customer.city or order.customer.state or order.customer.zip_code %}
+                {{ order.customer.city }}{% if order.customer.city and order.customer.state %}, {% endif %}{{ order.customer.state }} {{ order.customer.zip_code }}<br>
+                {% endif %}
+                {% if order.customer.country %}{{ order.customer.country }}{% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Project Description section -->
+    <div class="section-title" style="margin-top: 30px;">Project Description: {% if order.project_description %}{{ order.project_description }}{% endif %}</div>
+
+    <!-- Line items table -->
+    {% if order.line_items %}
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th class="line-no">Qty</th>
+                <th class="base-lot">Base / Lot ID</th>
+                <th>Description</th>
+                <th class="price">Unit Price</th>
+                <th class="price">Price(USD)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in order.line_items %}
+            <tr>
+                <td class="line-no">{{ item.formatted_quantity() }}</td>
+                <td class="base-lot">{% if item.should_show_base_lot_id %}{{ item.base_lot_id }}{% endif %}</td>
+                <td>
+                    {{ item.description|default('N/A', true) }}
+                    {% if item.binary_text %}
+                    <br>{{ item.binary_text|replace('\n', '<br>')|safe }}
+                    {% endif %}
+                </td>
+                <td class="price">{{ item.formatted_unit_price() }}</td>
+                <td class="price">{{ item.formatted_line_total() }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="na">No line items found for this order.</p>
+    {% endif %}
+
+    <!-- Grand Total -->
+    <div class="total-row">
+        <strong>Order Amount: {{ order.formatted_total_amount() }}</strong>
+    </div>
+</body>
+</html>

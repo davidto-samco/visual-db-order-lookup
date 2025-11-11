@@ -1,0 +1,20 @@
+[
+  {
+    "job_number": "4049",
+    "customer_name": "THE TRANE COMPANY",
+    "order_date": "2000-12-20",
+    "total_amount": 1751000.00
+  },
+  {
+    "job_number": "4050",
+    "customer_name": "ACME CORPORATION",
+    "order_date": "2001-01-15",
+    "total_amount": 125000.50
+  },
+  {
+    "job_number": "4051",
+    "customer_name": "SMITH MANUFACTURING",
+    "order_date": "2001-02-10",
+    "total_amount": 87500.25
+  }
+]

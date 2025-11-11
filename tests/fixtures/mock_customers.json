@@ -1,0 +1,33 @@
+[
+  {
+    "customer_id": "TRANE001",
+    "name": "THE TRANE COMPANY",
+    "address_1": "1234 Industrial Pkwy",
+    "address_2": "Suite 100",
+    "city": "Dallas",
+    "state": "TX",
+    "zip_code": "75201",
+    "country": "USA",
+    "bill_to_name": "THE TRANE COMPANY",
+    "bill_to_address_1": "PO Box 5678",
+    "bill_to_city": "Dallas",
+    "bill_to_state": "TX",
+    "bill_to_zip_code": "75201",
+    "bill_to_country": "USA"
+  },
+  {
+    "customer_id": "ACME001",
+    "name": "ACME CORPORATION",
+    "address_1": "5678 Main Street",
+    "city": "Houston",
+    "state": "TX",
+    "zip_code": "77001",
+    "country": "USA",
+    "bill_to_name": "ACME CORPORATION",
+    "bill_to_address_1": "5678 Main Street",
+    "bill_to_city": "Houston",
+    "bill_to_state": "TX",
+    "bill_to_zip_code": "77001",
+    "bill_to_country": "USA"
+  }
+]

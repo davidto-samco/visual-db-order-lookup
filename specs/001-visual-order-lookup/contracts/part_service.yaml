@@ -1,0 +1,344 @@
+# PartService API Contract
+# Visual Database Multi-Module Application - Inventory Module
+# Date: 2025-11-07
+
+service_name: PartService
+description: |
+  Provides part lookup and usage history services for the Inventory Module.
+  All operations are read-only against the Visual SQL Server database.
+
+database_tables:
+  - PART (part master data)
+  - PART_BINARY (extended descriptions)
+  - INVENTORY_TRANS (usage transactions)
+  - CUSTOMER_ORDER (order references)
+  - CUSTOMER (customer information)
+  - PURC_ORDER_LINE (purchase order lines)
+  - PURCHASE_ORDER (purchase order headers)
+  - VENDOR (vendor information)
+
+global_settings:
+  query_timeout_seconds: 30
+  connection_type: read_only
+  error_handling: return_null_on_not_found
+
+methods:
+  # =====================================================================
+  # Method: search_by_part_number
+  # =====================================================================
+  search_by_part_number:
+    description: |
+      Searches for a part by exact part number match. Returns complete part
+      master data including costs, quantities, and preferred vendor information.
+
+    input_parameters:
+      part_number:
+        type: string
+        required: true
+        max_length: 30
+        description: Exact part number to search for (case-insensitive)
+        validation:
+          - non_empty: true
+          - trim_whitespace: true
+          - uppercase_conversion: true
+        examples:
+          - "F0195"
+          - "PF004"
+          - "PP001"
+
+    output:
+      type: Part | null
+      description: |
+        Returns Part object if found, null if not found.
+        Part object includes all master data fields from PART table plus
+        vendor name from VENDOR join.
+
+      schema:
+        Part:
+          part_id: string
+          part_number: string
+          description: string
+          extended_description: string | null
+          unit_of_measure: string
+          unit_material_cost: Decimal | null
+          unit_labor_cost: Decimal | null
+          unit_burden_cost: Decimal | null
+          unit_price: Decimal | null
+          material_code: string | null
+          qty_on_hand: Decimal | null
+          qty_available: Decimal | null
+          qty_on_order: Decimal | null
+          qty_in_demand: Decimal | null
+          drawing_id: string | null
+          drawing_revision: string | null
+          vendor_id: string | null
+          vendor_name: string | null
+          is_purchased: boolean
+          is_fabricated: boolean
+          is_stocked: boolean
+          weight: Decimal | null
+          weight_um: string | null
+
+    errors:
+      - error_code: CONNECTION_ERROR
+        description: Database connection failed or lost
+        user_message: "Could not connect to Visual database. Please check network connection."
+
+      - error_code: TIMEOUT_ERROR
+        description: Query exceeded 30 second timeout
+        user_message: "Part search timed out. Please try again."
+
+      - error_code: INVALID_INPUT
+        description: Part number exceeds max length or is empty
+        user_message: "Invalid part number. Part numbers must be 1-30 characters."
+
+    database_query: |
+      SELECT p.ID, p.DESCRIPTION, p.STOCK_UM, p.UNIT_MATERIAL_COST,
+             p.UNIT_LABOR_COST, p.UNIT_BURDEN_COST, p.UNIT_PRICE,
+             p.MATERIAL_CODE, p.QTY_ON_HAND, p.QTY_AVAILABLE_ISS,
+             p.QTY_ON_ORDER, p.QTY_IN_DEMAND, p.DRAWING_ID, p.DRAWING_REV_NO,
+             p.PREF_VENDOR_ID, p.PURCHASED, p.FABRICATED, p.STOCKED,
+             p.WEIGHT, p.WEIGHT_UM, v.NAME AS vendor_name
+      FROM PART p WITH (NOLOCK)
+      LEFT JOIN VENDOR v WITH (NOLOCK) ON p.PREF_VENDOR_ID = v.ID
+      WHERE p.ID = ?
+
+    performance:
+      expected_execution_time: <5ms
+      index_usage: Primary key lookup (PART.ID)
+
+    example_usage: |
+      # Python example
+      part = part_service.search_by_part_number("F0195")
+      if part:
+          print(f"Found: {part.description}")
+          print(f"On Hand: {part.qty_on_hand}")
+      else:
+          print("Part not found")
+
+  # =====================================================================
+  # Method: get_where_used
+  # =====================================================================
+  get_where_used:
+    description: |
+      Retrieves all usage records for a specific part, showing where and when
+      the part was used in customer orders and work orders. Returns only
+      issue transactions (TYPE='I') ordered by most recent first.
+
+    input_parameters:
+      part_number:
+        type: string
+        required: true
+        max_length: 30
+        description: Part number to query usage history for
+        validation:
+          - non_empty: true
+          - trim_whitespace: true
+          - uppercase_conversion: true
+        examples:
+          - "F0195"
+          - "PF004"
+
+    output:
+      type: List[WhereUsed]
+      description: |
+        Returns list of WhereUsed records ordered by transaction_date descending.
+        Returns empty list if no usage records found.
+
+      schema:
+        WhereUsed:
+          part_number: string
+          cust_order_id: string | null
+          cust_order_line_no: int | null
+          work_order: string | null  # Format: "BASE_ID/LOT_ID"
+          transaction_date: date
+          quantity: Decimal
+          customer_name: string | null
+          warehouse_id: string | null
+          location_id: string | null
+
+    errors:
+      - error_code: CONNECTION_ERROR
+        description: Database connection failed or lost
+        user_message: "Could not connect to Visual database. Please check network connection."
+
+      - error_code: TIMEOUT_ERROR
+        description: Query exceeded 30 second timeout
+        user_message: "Where-used query timed out. Please try again."
+
+      - error_code: INVALID_INPUT
+        description: Part number exceeds max length or is empty
+        user_message: "Invalid part number. Part numbers must be 1-30 characters."
+
+    database_query: |
+      SELECT it.PART_ID, it.CUST_ORDER_ID, it.CUST_ORDER_LINE_NO,
+             it.WORKORDER_BASE_ID + '/' + it.WORKORDER_LOT_ID AS work_order,
+             it.TRANSACTION_DATE, it.QTY, it.WAREHOUSE_ID, it.LOCATION_ID,
+             c.NAME AS customer_name
+      FROM INVENTORY_TRANS it WITH (NOLOCK)
+      LEFT JOIN CUSTOMER_ORDER co WITH (NOLOCK) ON it.CUST_ORDER_ID = co.ID
+      LEFT JOIN CUSTOMER c WITH (NOLOCK) ON co.CUSTOMER_ID = c.ID
+      WHERE it.PART_ID = ? AND it.TYPE = 'I'
+      ORDER BY it.TRANSACTION_DATE DESC
+
+    performance:
+      expected_execution_time: <100ms
+      expected_result_count: 1-1000 records (typical)
+      index_usage: INVENTORY_TRANS.PART_ID index recommended
+
+    example_usage: |
+      # Python example
+      usage_records = part_service.get_where_used("F0195")
+      print(f"Part used in {len(usage_records)} transactions")
+      for usage in usage_records[:10]:  # Show first 10
+          print(f"{usage.transaction_date}: {usage.customer_name} - Qty {usage.quantity}")
+
+  # =====================================================================
+  # Method: get_purchase_history
+  # =====================================================================
+  get_purchase_history:
+    description: |
+      Retrieves purchase order history for a specific part, showing all
+      PO lines where this part was ordered. Returns vendor information,
+      quantities, prices, and dates ordered by most recent first.
+
+    input_parameters:
+      part_number:
+        type: string
+        required: true
+        max_length: 30
+        description: Part number to query purchase history for
+        validation:
+          - non_empty: true
+          - trim_whitespace: true
+          - uppercase_conversion: true
+        examples:
+          - "F0195"
+          - "R5000"
+
+      limit:
+        type: int
+        required: false
+        default: 100
+        min_value: 1
+        max_value: 1000
+        description: Maximum number of purchase records to return
+
+    output:
+      type: List[PurchaseHistory]
+      description: |
+        Returns list of PurchaseHistory records ordered by order_date descending.
+        Limited to 'limit' parameter (default 100).
+        Returns empty list if no purchase history found.
+
+      schema:
+        PurchaseHistory:
+          part_number: string
+          po_number: string
+          line_number: int
+          order_date: date
+          vendor_name: string
+          vendor_id: string
+          vendor_part_id: string | null
+          quantity: Decimal
+          unit_price: Decimal
+          line_total: Decimal
+          desired_receive_date: date | null
+          last_received_date: date | null
+
+    errors:
+      - error_code: CONNECTION_ERROR
+        description: Database connection failed or lost
+        user_message: "Could not connect to Visual database. Please check network connection."
+
+      - error_code: TIMEOUT_ERROR
+        description: Query exceeded 30 second timeout
+        user_message: "Purchase history query timed out. Please try again."
+
+      - error_code: INVALID_INPUT
+        description: Part number exceeds max length or is empty
+        user_message: "Invalid part number. Part numbers must be 1-30 characters."
+
+      - error_code: INVALID_LIMIT
+        description: Limit parameter out of range (1-1000)
+        user_message: "Limit must be between 1 and 1000."
+
+    database_query: |
+      SELECT TOP (@limit)
+             pol.PART_ID, po.ID AS po_number, pol.LINE_NO,
+             po.ORDER_DATE, v.NAME AS vendor_name, v.ID AS vendor_id,
+             pol.VENDOR_PART_ID, pol.USER_ORDER_QTY AS quantity,
+             pol.UNIT_PRICE, pol.TOTAL_AMT_ORDERED AS line_total,
+             pol.DESIRED_RECV_DATE, pol.LAST_RECEIVED_DATE
+      FROM PURC_ORDER_LINE pol WITH (NOLOCK)
+      INNER JOIN PURCHASE_ORDER po WITH (NOLOCK) ON pol.PURC_ORDER_ID = po.ID
+      INNER JOIN VENDOR v WITH (NOLOCK) ON po.VENDOR_ID = v.ID
+      WHERE pol.PART_ID = ?
+      ORDER BY po.ORDER_DATE DESC
+
+    performance:
+      expected_execution_time: <200ms
+      expected_result_count: 1-1000 records (limited by parameter)
+      index_usage: PURC_ORDER_LINE.PART_ID index recommended
+
+    example_usage: |
+      # Python example - Get last 50 purchases
+      purchase_history = part_service.get_purchase_history("F0195", limit=50)
+      print(f"Found {len(purchase_history)} purchase orders")
+      for po in purchase_history[:5]:  # Show first 5
+          print(f"{po.order_date}: PO {po.po_number} - {po.vendor_name}")
+          print(f"  Qty: {po.quantity} @ ${po.unit_price} = ${po.line_total}")
+
+# =====================================================================
+# Service Implementation Notes
+# =====================================================================
+implementation_notes:
+  threading:
+    description: |
+      All methods should be executed in a background thread (DatabaseWorker pattern)
+      to prevent UI freezing. Use Qt signals to communicate results back to UI thread.
+
+  caching:
+    description: |
+      Part master data can be cached (LRU cache, max 100 entries) to improve
+      performance for repeated lookups. Where-used and purchase history should
+      NOT be cached (may change over time).
+
+  error_handling:
+    description: |
+      All database errors should be caught and converted to user-friendly messages.
+      Connection errors should suggest checking network. Timeout errors should
+      suggest trying again or narrowing search.
+
+  validation:
+    description: |
+      Input validation should occur before database query. Trim whitespace,
+      convert to uppercase, check length constraints. Show validation errors
+      immediately without database round-trip.
+
+# =====================================================================
+# Test Data
+# =====================================================================
+test_data:
+  valid_parts:
+    - part_number: "F0195"
+      description: "SLW 1/2"
+      expected_where_used_count: ">900"
+      expected_purchase_count: "995"
+      expected_vendor: "KARRIC"
+
+    - part_number: "PF004"
+      description: "1/4 - 20 x 3/4\" BOLT GRADE"
+      expected_where_used_count: ">10"
+      expected_purchase_count: ">50"
+
+    - part_number: "PP001"
+      description: "ISYS MODULE CLIP"
+      expected_where_used_count: "3"
+
+  invalid_parts:
+    - part_number: "ZZZZZ99999"
+      expected_result: null
+
+    - part_number: ""
+      expected_error: INVALID_INPUT

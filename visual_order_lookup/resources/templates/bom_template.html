@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bill of Materials - Job {{ job_number }}</title>
+    <style>
+        /* Visual Legacy Application Styles - BOM Template */
+        body {
+            font-family: 'Courier New', 'Courier', monospace;
+            font-size: 10pt;
+            margin: 20px;
+            background-color: #ffffff;
+            color: #333;
+        }
+
+        h1 {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 18pt;
+            font-weight: 600;
+            color: #0d47a1;
+            margin-bottom: 5px;
+            border-bottom: 2px solid #0d47a1;
+            padding-bottom: 5px;
+        }
+
+        h2 {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 14pt;
+            font-weight: 600;
+            color: #1565c0;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #90caf9;
+            padding-bottom: 3px;
+        }
+
+        /* Job Header Information */
+        .job-header {
+            background-color: #e3f2fd;
+            border: 1px solid #90caf9;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 11pt;
+        }
+
+        .job-header table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .job-header th {
+            text-align: left;
+            font-weight: 600;
+            color: #0d47a1;
+            width: 150px;
+            padding: 5px 0;
+        }
+
+        .job-header td {
+            padding: 5px 0;
+        }
+
+        /* BOM Tree Structure */
+        .bom-tree {
+            margin-top: 20px;
+            background-color: #fafafa;
+            border: 1px solid #e0e0e0;
+            padding: 15px;
+        }
+
+        .bom-node {
+            line-height: 1.8;
+            padding: 2px 0;
+            white-space: nowrap;
+        }
+
+        /* Color coding for part types (matching Visual conventions) */
+        .bom-node.assembly {
+            color: #1565c0;  /* Blue for assemblies (white in Visual, blue for visibility) */
+            font-weight: 600;
+        }
+
+        .bom-node.manufactured {
+            color: #000000;  /* Black for manufactured parts */
+        }
+
+        .bom-node.purchased {
+            color: #c62828;  /* Red for purchased parts */
+        }
+
+        .bom-node.other {
+            color: #757575;  /* Gray for other/unknown */
+        }
+
+        /* BOM Node Components */
+        .base-lot {
+            display: inline-block;
+            width: 120px;
+            font-weight: 600;
+        }
+
+        .sub-id {
+            display: inline-block;
+            width: 50px;
+            text-align: right;
+            margin-right: 10px;
+        }
+
+        .description {
+            display: inline-block;
+            width: 300px;
+        }
+
+        .drawing {
+            display: inline-block;
+            width: 150px;
+            color: #1976d2;
+        }
+
+        .quantity {
+            display: inline-block;
+            width: 80px;
+            text-align: right;
+        }
+
+        .material {
+            display: inline-block;
+            width: 100px;
+            color: #2e7d32;
+        }
+
+        /* Indentation for hierarchy */
+        .indent-0 { margin-left: 0px; }
+        .indent-1 { margin-left: 20px; }
+        .indent-2 { margin-left: 40px; }
+        .indent-3 { margin-left: 60px; }
+        .indent-4 { margin-left: 80px; }
+        .indent-5 { margin-left: 100px; }
+
+        /* Legend */
+        .legend {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border: 1px solid #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 10pt;
+        }
+
+        .legend h3 {
+            font-size: 11pt;
+            font-weight: 600;
+            color: #0d47a1;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        .legend-item {
+            padding: 5px 0;
+        }
+
+        .legend-color {
+            display: inline-block;
+            width: 120px;
+            font-weight: 600;
+        }
+
+        .legend-color.assembly { color: #1565c0; }
+        .legend-color.manufactured { color: #000000; }
+        .legend-color.purchased { color: #c62828; }
+
+        /* Summary Statistics */
+        .summary {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #e8f5e9;
+            border: 1px solid #81c784;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 11pt;
+        }
+
+        .summary h3 {
+            font-size: 12pt;
+            font-weight: 600;
+            color: #1b5e20;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        .summary-stat {
+            padding: 3px 0;
+        }
+
+        .summary-stat strong {
+            display: inline-block;
+            width: 200px;
+        }
+
+        /* Print styles */
+        @media print {
+            body {
+                margin: 0;
+                padding: 10px;
+            }
+            .bom-tree {
+                background-color: white;
+                border: none;
+            }
+            .summary, .legend {
+                page-break-before: auto;
+                background-color: white;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Job Header -->
+    <h1>Bill of Materials - Job {{ job_number }}</h1>
+
+    <div class="job-header">
+        <table>
+            <tr>
+                <th>Job Number:</th>
+                <td><strong>{{ job_number }}</strong></td>
+            </tr>
+            <tr>
+                <th>Customer:</th>
+                <td>{{ customer_name | default('N/A') }}</td>
+            </tr>
+            <tr>
+                <th>Description:</th>
+                <td>{{ job_description | default('N/A') }}</td>
+            </tr>
+            <tr>
+                <th>Assembly Count:</th>
+                <td>{{ assembly_count }} assemblies</td>
+            </tr>
+            <tr>
+                <th>Total Components:</th>
+                <td>{{ bom_nodes|length }} work orders</td>
+            </tr>
+            <tr>
+                <th>Generated:</th>
+                <td>{{ current_date | date }} at {{ current_time }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- BOM Hierarchy Tree -->
+    <h2>Bill of Materials Hierarchy</h2>
+
+    <div class="bom-tree">
+        {% if bom_nodes and bom_nodes|length > 0 %}
+            {% for node in bom_nodes %}
+            <div class="bom-node {{ node.node_type_class }} indent-{{ node.depth }}">
+                <span class="base-lot">{{ node.base_lot_id }}</span>
+                {% if node.sub_id and node.depth > 1 %}
+                <span class="sub-id">{{ node.sub_id }}</span>
+                {% endif %}
+                <span class="description">{{ node.description | default('N/A') }}</span>
+                {% if node.drawing_id %}
+                <span class="drawing">Dwg: {{ node.drawing_id }}{% if node.drawing_revision %}-{{ node.drawing_revision }}{% endif %}</span>
+                {% endif %}
+                {% if node.quantity %}
+                <span class="quantity">Qty: {{ node.quantity }}</span>
+                {% endif %}
+                {% if node.material_code %}
+                <span class="material">{{ node.material_code }}</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+        <div style="padding: 20px; text-align: center; color: #757575; font-style: italic; font-family: 'Segoe UI', sans-serif;">
+            No BOM data found for Job {{ job_number }}.
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="summary">
+        <h3>BOM Summary Statistics</h3>
+        <div class="summary-stat">
+            <strong>Total Assemblies:</strong> {{ stats.assembly_count | default(0) }}
+        </div>
+        <div class="summary-stat">
+            <strong>Total Manufactured Parts:</strong> {{ stats.manufactured_count | default(0) }}
+        </div>
+        <div class="summary-stat">
+            <strong>Total Purchased Parts:</strong> {{ stats.purchased_count | default(0) }}
+        </div>
+        <div class="summary-stat">
+            <strong>Total Other Parts:</strong> {{ stats.other_count | default(0) }}
+        </div>
+        <div class="summary-stat">
+            <strong>Total Work Orders:</strong> {{ bom_nodes|length }}
+        </div>
+        {% if stats.largest_assembly %}
+        <div class="summary-stat">
+            <strong>Largest Assembly:</strong> {{ stats.largest_assembly.base_lot_id }} ({{ stats.largest_assembly.part_count }} parts)
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+        <h3>Color Coding Legend</h3>
+        <div class="legend-item">
+            <span class="legend-color assembly">Blue Text</span> - Assemblies (fabricated, has sub-components)
+        </div>
+        <div class="legend-item">
+            <span class="legend-color manufactured">Black Text</span> - Manufactured Parts (fabricated, no sub-components)
+        </div>
+        <div class="legend-item">
+            <span class="legend-color purchased">Red Text</span> - Purchased Parts (vendor-supplied)
+        </div>
+
+        <h3 style="margin-top: 20px;">Hierarchy Indentation</h3>
+        <div class="legend-item">
+            Each level of indentation (20px) represents one level deeper in the BOM hierarchy.
+            Assemblies contain parts, which may contain sub-assemblies.
+        </div>
+
+        <h3 style="margin-top: 20px;">Column Definitions</h3>
+        <div class="legend-item">
+            <strong>Base/Lot ID:</strong> Job number and assembly identifier (e.g., 8113/26)
+        </div>
+        <div class="legend-item">
+            <strong>Sub ID:</strong> Component sequence number within assembly
+        </div>
+        <div class="legend-item">
+            <strong>Description:</strong> Part or assembly description from part master
+        </div>
+        <div class="legend-item">
+            <strong>Dwg:</strong> Drawing number and revision
+        </div>
+        <div class="legend-item">
+            <strong>Qty:</strong> Desired quantity for this component
+        </div>
+        <div class="legend-item">
+            <strong>Material:</strong> Material specification code (e.g., 4140, 304SS)
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="margin-top: 40px; padding-top: 10px; border-top: 1px solid #e0e0e0; color: #757575; font-size: 9pt; text-align: center; font-family: 'Segoe UI', sans-serif;">
+        Visual Database Multi-Module Application - Engineering Module | Bill of Materials Report
+    </div>
+</body>
+</html>

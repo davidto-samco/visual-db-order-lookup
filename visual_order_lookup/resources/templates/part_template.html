@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Part Information - {{ part_number }}</title>
+    <style>
+        /* Visual Legacy Application Styles - Part Template */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 11pt;
+            margin: 20px;
+            background-color: #ffffff;
+            color: #333;
+        }
+
+        h1 {
+            font-size: 18pt;
+            font-weight: 600;
+            color: #0d47a1;
+            margin-bottom: 5px;
+            border-bottom: 2px solid #0d47a1;
+            padding-bottom: 5px;
+        }
+
+        h2 {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #1565c0;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #90caf9;
+            padding-bottom: 3px;
+        }
+
+        h3 {
+            font-size: 12pt;
+            font-weight: 600;
+            color: #1976d2;
+            margin-top: 15px;
+            margin-bottom: 8px;
+        }
+
+        /* Part Information Table */
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background-color: #fafafa;
+            border: 1px solid #e0e0e0;
+        }
+
+        .info-table th {
+            text-align: left;
+            padding: 8px 12px;
+            background-color: #e3f2fd;
+            font-weight: 600;
+            color: #0d47a1;
+            width: 200px;
+            border-bottom: 1px solid #90caf9;
+        }
+
+        .info-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #e0e0e0;
+            background-color: #ffffff;
+        }
+
+        .info-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Data Tables (Where Used, Purchase History) */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 10pt;
+            border: 1px solid #e0e0e0;
+        }
+
+        .data-table thead {
+            background-color: #0d47a1;
+            color: white;
+        }
+
+        .data-table th {
+            text-align: left;
+            padding: 10px 8px;
+            font-weight: 600;
+            border-bottom: 2px solid #1565c0;
+        }
+
+        .data-table td {
+            padding: 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .data-table tbody tr:nth-child(even) {
+            background-color: #f5f5f5;
+        }
+
+        .data-table tbody tr:hover {
+            background-color: #e3f2fd;
+        }
+
+        /* Number alignment */
+        .number {
+            text-align: right;
+            font-family: 'Courier New', monospace;
+        }
+
+        .currency {
+            text-align: right;
+            font-family: 'Courier New', monospace;
+            color: #1b5e20;
+        }
+
+        /* Section styling */
+        .section {
+            margin-bottom: 30px;
+        }
+
+        /* Empty state */
+        .empty-state {
+            padding: 20px;
+            text-align: center;
+            color: #757575;
+            font-style: italic;
+            background-color: #f5f5f5;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+
+        /* Status indicators */
+        .status-low {
+            color: #c62828;
+            font-weight: 600;
+        }
+
+        .status-ok {
+            color: #2e7d32;
+        }
+
+        .status-high {
+            color: #1565c0;
+        }
+
+        /* Print styles */
+        @media print {
+            body {
+                margin: 0;
+                padding: 10px;
+            }
+            .data-table tbody tr:nth-child(even) {
+                background-color: #f0f0f0;
+            }
+            .data-table tbody tr:hover {
+                background-color: transparent;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Part Header -->
+    <h1>Part Information: {{ part_number }}</h1>
+    <p style="color: #757575; margin-top: -5px; font-size: 10pt;">
+        Retrieved: {{ current_date | date }}
+    </p>
+
+    <!-- Part Information Section -->
+    <div class="section">
+        <h2>Part Master Data</h2>
+        <table class="info-table">
+            <tr>
+                <th>Part Number:</th>
+                <td><strong>{{ part_number }}</strong></td>
+            </tr>
+            <tr>
+                <th>Description:</th>
+                <td>{{ description }}</td>
+            </tr>
+            {% if extended_description %}
+            <tr>
+                <th>Extended Description:</th>
+                <td>{{ extended_description }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+                <th>Unit of Measure:</th>
+                <td>{{ unit_of_measure | default('N/A') }}</td>
+            </tr>
+            <tr>
+                <th>Material Code:</th>
+                <td>{{ material_code | default('N/A') }}</td>
+            </tr>
+            <tr>
+                <th>Drawing Number:</th>
+                <td>{{ drawing_id | default('N/A') }}{% if drawing_revision %} Rev {{ drawing_revision }}{% endif %}</td>
+            </tr>
+            {% if weight %}
+            <tr>
+                <th>Weight:</th>
+                <td>{{ weight }} {{ weight_um | default('') }}</td>
+            </tr>
+            {% endif %}
+        </table>
+    </div>
+
+    <!-- Cost Information Section -->
+    <div class="section">
+        <h2>Cost Information</h2>
+        <table class="info-table">
+            <tr>
+                <th>Unit Material Cost:</th>
+                <td class="currency">{{ unit_material_cost | currency }}</td>
+            </tr>
+            <tr>
+                <th>Unit Labor Cost:</th>
+                <td class="currency">{{ unit_labor_cost | currency }}</td>
+            </tr>
+            <tr>
+                <th>Unit Burden Cost:</th>
+                <td class="currency">{{ unit_burden_cost | currency }}</td>
+            </tr>
+            <tr>
+                <th>Total Unit Cost:</th>
+                <td class="currency"><strong>{{ total_unit_cost | currency }}</strong></td>
+            </tr>
+            <tr>
+                <th>Unit Price (Selling):</th>
+                <td class="currency"><strong>{{ unit_price | currency }}</strong></td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Inventory Status Section -->
+    <div class="section">
+        <h2>Inventory Status</h2>
+        <table class="info-table">
+            <tr>
+                <th>Quantity On Hand:</th>
+                <td class="number {% if qty_on_hand and qty_on_hand < 10 %}status-low{% elif qty_on_hand and qty_on_hand > 100 %}status-high{% else %}status-ok{% endif %}">
+                    {{ qty_on_hand | default('0') }}
+                </td>
+            </tr>
+            <tr>
+                <th>Quantity Available:</th>
+                <td class="number status-ok">{{ qty_available | default('0') }}</td>
+            </tr>
+            <tr>
+                <th>Quantity On Order:</th>
+                <td class="number">{{ qty_on_order | default('0') }}</td>
+            </tr>
+            <tr>
+                <th>Quantity In Demand:</th>
+                <td class="number">{{ qty_in_demand | default('0') }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Vendor Information Section -->
+    <div class="section">
+        <h2>Vendor Information</h2>
+        <table class="info-table">
+            <tr>
+                <th>Preferred Vendor:</th>
+                <td>{{ vendor_name | default('N/A') }}</td>
+            </tr>
+            <tr>
+                <th>Vendor ID:</th>
+                <td>{{ vendor_id | default('N/A') }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Part Type Section -->
+    <div class="section">
+        <h2>Part Classification</h2>
+        <table class="info-table">
+            <tr>
+                <th>Purchased Part:</th>
+                <td>{% if is_purchased %}Yes{% else %}No{% endif %}</td>
+            </tr>
+            <tr>
+                <th>Fabricated Part:</th>
+                <td>{% if is_fabricated %}Yes{% else %}No{% endif %}</td>
+            </tr>
+            <tr>
+                <th>Stocked Part:</th>
+                <td>{% if is_stocked %}Yes{% else %}No{% endif %}</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Where Used Section -->
+    <div class="section">
+        <h2>Where Used</h2>
+        {% if where_used and where_used|length > 0 %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Transaction Date</th>
+                    <th>Job Number</th>
+                    <th>Customer Order</th>
+                    <th>Work Order</th>
+                    <th>Customer Name</th>
+                    <th>Quantity</th>
+                    <th>Location</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for usage in where_used %}
+                <tr>
+                    <td>{{ usage.transaction_date | date }}</td>
+                    <td>{{ usage.job_number | default('N/A') }}</td>
+                    <td>{{ usage.cust_order_id | default('N/A') }}</td>
+                    <td>{{ usage.work_order | default('N/A') }}</td>
+                    <td>{{ usage.customer_name | default('Internal/Stock') }}</td>
+                    <td class="number">{{ usage.quantity }}</td>
+                    <td>{{ usage.warehouse_id | default('') }}{% if usage.location_id %}/{{ usage.location_id }}{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p style="color: #757575; font-size: 9pt; margin-top: -10px;">
+            Showing {{ where_used|length }} usage record(s)
+        </p>
+        {% else %}
+        <div class="empty-state">
+            No usage records found for this part.
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Purchase History Section -->
+    <div class="section">
+        <h2>Purchase History</h2>
+        {% if purchase_history and purchase_history|length > 0 %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Order Date</th>
+                    <th>PO Number</th>
+                    <th>Line</th>
+                    <th>Vendor Name</th>
+                    <th>Vendor Part #</th>
+                    <th>Quantity</th>
+                    <th>Unit Price</th>
+                    <th>Line Total</th>
+                    <th>Received Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for po in purchase_history %}
+                <tr>
+                    <td>{{ po.order_date | date }}</td>
+                    <td>{{ po.po_number }}</td>
+                    <td class="number">{{ po.line_number }}</td>
+                    <td>{{ po.vendor_name }}</td>
+                    <td>{{ po.vendor_part_id | default('N/A') }}</td>
+                    <td class="number">{{ po.quantity }}</td>
+                    <td class="currency">{{ po.unit_price | currency }}</td>
+                    <td class="currency">{{ po.line_total | currency }}</td>
+                    <td>{{ po.last_received_date | date }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p style="color: #757575; font-size: 9pt; margin-top: -10px;">
+            Showing {{ purchase_history|length }} purchase order(s)
+        </p>
+        {% else %}
+        <div class="empty-state">
+            No purchase history found for this part.
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Footer -->
+    <div style="margin-top: 40px; padding-top: 10px; border-top: 1px solid #e0e0e0; color: #757575; font-size: 9pt; text-align: center;">
+        Visual Database Multi-Module Application - Inventory Module | Part Lookup Report
+    </div>
+</body>
+</html>
