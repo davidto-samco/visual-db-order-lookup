@@ -139,7 +139,7 @@ The work order tree displays 7 different node types arranged in 4 hierarchy leve
 
 **NFR-2: Database Access**
 - Read-only access to Visual database (Constitutional requirement)
-- Query tables: WORK_ORDER, OPERATION, REQUIREMENT, PART, LABOR_TICKET, INVENTORY_TRANS, WIP_BALANCE
+- Query tables: WORK_ORDER, OPERATION, REQUIREMENT, PART, LABOR_TICKET, INVENTORY_TRANS, WIP_BALANCE, WORKORDER_BINARY, REQUIREMENT_BINARY
 - Use WITH (NOLOCK) hint for all queries
 - Parameterized queries to prevent SQL injection
 
@@ -216,6 +216,19 @@ The work order tree displays 7 different node types arranged in 4 hierarchy leve
 - `BURDEN_COST` (decimal)
 - `TOTAL_COST` (decimal)
 
+**WORKORDER_BINARY** (Work order notes)
+- `WORKORDER_BASE_ID` (varchar 30, FK to WORK_ORDER.BASE_ID)
+- `WORKORDER_LOT_ID` (varchar 30, FK to WORK_ORDER.LOT_ID)
+- `bits` (image) - Work order notes stored as binary data
+- **Note**: Requires two-step cast to retrieve text: `CAST(CAST(bits AS VARBINARY(MAX)) AS VARCHAR(MAX))`
+
+**REQUIREMENT_BINARY** (Requirement notes)
+- `WORKORDER_BASE_ID`, `WORKORDER_LOT_ID`, `WORKORDER_SUB_ID` (FK to WORK_ORDER)
+- `OPERATION_SEQ_NO` (smallint, FK to OPERATION.SEQUENCE)
+- `PART_ID` (varchar 30, FK to REQUIREMENT.PART_ID)
+- `bits` (image) - Requirement notes stored as binary data
+- **Note**: Requires two-step cast to retrieve text: `CAST(CAST(bits AS VARBINARY(MAX)) AS VARCHAR(MAX))`
+
 ### Query Patterns
 
 **Note**: Sample queries shown below. Complete implementation includes 8 query functions (search, header, operations, requirements, labor, inventory, WIP, hierarchy) - see `visual_order_lookup/database/queries/work_order_queries.py` for full set.
@@ -282,7 +295,7 @@ ORDER BY r.PART_ID
 
 1. Engineering module accessible from left sidebar
 2. BASE_ID search returns matching work orders within 5 seconds
-3. Work order hierarchical tree displays correctly with all 7 levels
+3. Work order hierarchical tree displays correctly with all 7 node types across 4 hierarchy levels
 4. Expand/collapse operations work smoothly (<100ms response)
 5. Tree supports keyboard navigation (arrows, space, enter)
 6. Export generates CSV with correct hierarchy indentation
@@ -356,7 +369,7 @@ ORDER BY r.PART_ID
 ## Dependencies
 
 - Existing application infrastructure (database connection, PyQt6)
-- Visual database WORK_ORDER, OPERATION, REQUIREMENT, PART, LABOR_TICKET, INVENTORY_TRANS, WIP_BALANCE tables
+- Visual database tables: WORK_ORDER, OPERATION, REQUIREMENT, PART, LABOR_TICKET, INVENTORY_TRANS, WIP_BALANCE (primary), WORKORDER_BINARY, REQUIREMENT_BINARY (binary notes)
 - PyQt6 QTreeWidget for hierarchical display
 - CSV export functionality (similar to existing modules)
 
