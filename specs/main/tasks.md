@@ -27,43 +27,38 @@
 
 ### Data Models
 
-- [X] [T00&] Create WorkOrder dataclass with composite PK (base_id, lot_id, sub_id), part info, dates, and formatting methods → `visual_order_lookup/database/models/work_order.py`
-- [X] [T00&] Create Operation dataclass with FK to WorkOrder, sequence, operation_id, description, hours, and formatting methods → `visual_order_lookup/database/models/work_order.py`
-- [X] [T0&] Create Requirement dataclass with FK to WorkOrder+Operation, part_id, quantities, SUBORD_WO_SUB_ID field, and formatting methods → `visual_order_lookup/database/models/work_order.py`
-- [X] [T0&] Create LaborTicket dataclass with FK to WorkOrder, employee_id, labor_date, hours, rates, and formatting methods → `visual_order_lookup/database/models/work_order.py`
-- [X] [T0&] Create InventoryTransaction dataclass with FK to WorkOrder, part_id, trans_type, quantity, location, and formatting methods → `visual_order_lookup/database/models/work_order.py`
-- [X] [T0&] Create WIPBalance dataclass with FK to WorkOrder, cost breakdown (material, labor, burden), and formatting methods → `visual_order_lookup/database/models/work_order.py`
-- [X] [T0&] [P] Create __init__.py to export all work order models → `visual_order_lookup/database/models/__init__.py`
+- [X] [T008] Create WorkOrder dataclass with composite PK (base_id, lot_id, sub_id), part info, dates, and formatting methods → `visual_order_lookup/database/models/work_order.py`
+- [X] [T009] Create Operation dataclass with FK to WorkOrder, sequence, operation_id, description, hours, and formatting methods → `visual_order_lookup/database/models/work_order.py`
+- [X] [T010] Create Requirement dataclass with FK to WorkOrder+Operation, part_id, quantities, SUBORD_WO_SUB_ID field, and formatting methods → `visual_order_lookup/database/models/work_order.py`
+- [X] [T011] Create LaborTicket dataclass with FK to WorkOrder, employee_id, labor_date, hours, rates, and formatting methods → `visual_order_lookup/database/models/work_order.py`
+- [X] [T012] Create InventoryTransaction dataclass with FK to WorkOrder, part_id, trans_type, quantity, location, and formatting methods → `visual_order_lookup/database/models/work_order.py`
+- [X] [T013] Create WIPBalance dataclass with FK to WorkOrder, cost breakdown (material, labor, burden), and formatting methods → `visual_order_lookup/database/models/work_order.py`
+- [X] [T014] [P] Create __init__.py to export all work order models → `visual_order_lookup/database/models/__init__.py`
 
 ### Query Functions (WITH NOLOCK, Parameterized)
 
-- [X] [T0&] [US1] Implement search_work_orders(cursor, base_id_pattern, limit=1000) with TOP 1000, LIKE pattern, JOIN PART, ORDER BY CREATE_DATE DESC → `visual_order_lookup/database/queries/work_order_queries.py`
-- [X] [T0&] [US2] Implement get_work_order_header(cursor, base_id, lot_id, sub_id) with aggregate counts for operations, labor, materials → `visual_order_lookup/database/queries/work_order_queries.py`
-- [X] [T0&] [US3] Implement get_operations(cursor, base_id, lot_id, sub_id) with requirement_count subquery, ORDER BY SEQUENCE → `visual_order_lookup/database/queries/work_order_queries.py`
-- [X] [T0&] [US3] Implement get_requirements(cursor, base_id, lot_id, sub_id, operation_seq) with PART join, SUBORD_WO_SUB_ID retrieval → `visual_order_lookup/database/queries/work_order_queries.py`
-- [X] [T0&] [US3] Implement get_labor_tickets(cursor, base_id, lot_id, sub_id) with calculated total_hrs and total_cost, ORDER BY LABOR_DATE DESC → `visual_order_lookup/database/queries/work_order_queries.py`
-- [X] [T0&] [US3] Implement get_inventory_transactions(cursor, base_id, lot_id, sub_id) with PART join, WHERE WORKORDER_BASE_ID IS NOT NULL, ORDER BY TRANS_DATE DESC → `visual_order_lookup/database/queries/work_order_queries.py`
-- [X] [T0&] [US3] Implement get_wip_balance(cursor, base_id, lot_id, sub_id) returning single record or None → `visual_order_lookup/database/queries/work_order_queries.py`
-- [X] [T0&] [US3] Implement get_work_order_hierarchy(cursor, base_id, lot_id, sub_id) using recursive CTE to traverse SUBORD_WO_SUB_ID parent-child relationships → `visual_order_lookup/database/queries/work_order_queries.py`
-- [ ] [T023A] [US3] Implement get_work_order_notes(cursor, base_id, lot_id) to retrieve WORKORDER_BINARY.bits with two-step cast (CAST(CAST(bits AS VARBINARY(MAX)) AS VARCHAR(MAX))) for root work order notes → `visual_order_lookup/database/queries/work_order_queries.py`
-- [ ] [T023B] [US3] Implement get_requirement_notes(cursor, base_id, lot_id, sub_id, operation_seq, part_id) to retrieve REQUIREMENT_BINARY.bits with two-step cast for requirement-level notes → `visual_order_lookup/database/queries/work_order_queries.py`
-- [X] [T0&] [P] Add error handling wrapper for all query functions with 5-second timeout, DatabaseError wrapping → `visual_order_lookup/database/queries/work_order_queries.py`
+- [X] [T015] [US1] Implement search_work_orders(cursor, base_id_pattern, limit=1000) with TOP 1000, LIKE pattern, JOIN PART, ORDER BY CREATE_DATE DESC → `visual_order_lookup/database/queries/work_order_queries.py`
+- [X] [T016] [US2] Implement get_work_order_header(cursor, base_id, lot_id, sub_id) with aggregate counts for operations, labor, materials → `visual_order_lookup/database/queries/work_order_queries.py`
+- [X] [T017] [US3] Implement get_operations(cursor, base_id, lot_id, sub_id) with requirement_count subquery, ORDER BY SEQUENCE → `visual_order_lookup/database/queries/work_order_queries.py`
+- [X] [T018] [US3] Implement get_requirements(cursor, base_id, lot_id, sub_id, operation_seq) with PART join, SUBORD_WO_SUB_ID retrieval → `visual_order_lookup/database/queries/work_order_queries.py`
+- [X] [T019] [US3] Implement get_labor_tickets(cursor, base_id, lot_id, sub_id) with calculated total_hrs and total_cost, ORDER BY LABOR_DATE DESC → `visual_order_lookup/database/queries/work_order_queries.py`
+- [X] [T020] [US3] Implement get_inventory_transactions(cursor, base_id, lot_id, sub_id) with PART join, WHERE WORKORDER_BASE_ID IS NOT NULL, ORDER BY TRANS_DATE DESC → `visual_order_lookup/database/queries/work_order_queries.py`
+- [X] [T021] [US3] Implement get_wip_balance(cursor, base_id, lot_id, sub_id) returning single record or None → `visual_order_lookup/database/queries/work_order_queries.py`
+- [X] [T022] [US3] Implement get_work_order_hierarchy(cursor, base_id, lot_id, sub_id) using recursive CTE to traverse SUBORD_WO_SUB_ID parent-child relationships → `visual_order_lookup/database/queries/work_order_queries.py`
+- [X] [T024] [P] Add error handling wrapper for all query functions with 5-second timeout, DatabaseError wrapping → `visual_order_lookup/database/queries/work_order_queries.py`
 
 ### Service Layer
 
-- [X] [T0&] Create WorkOrderService class with __init__(db_connection) → `visual_order_lookup/services/work_order_service.py`
-- [X] [T0&] [US1] Implement WorkOrderService.search_work_orders(base_id_pattern, limit=1000) returning List[WorkOrder] → `visual_order_lookup/services/work_order_service.py`
-- [X] [T0&] [US2] Implement WorkOrderService.get_work_order_header(base_id, lot_id, sub_id) returning WorkOrder with counts → `visual_order_lookup/services/work_order_service.py`
-- [X] [T0&] [US3] Implement WorkOrderService.get_operations(base_id, lot_id, sub_id) returning List[Operation] → `visual_order_lookup/services/work_order_service.py`
-- [X] [T0&] [US3] Implement WorkOrderService.get_requirements(base_id, lot_id, sub_id, operation_seq) returning List[Requirement] → `visual_order_lookup/services/work_order_service.py`
-- [X] [T0&] [US3] Implement WorkOrderService.get_labor_tickets(base_id, lot_id, sub_id) returning List[LaborTicket] → `visual_order_lookup/services/work_order_service.py`
-- [X] [T03&] [US3] Implement WorkOrderService.get_inventory_transactions(base_id, lot_id, sub_id) returning List[InventoryTransaction] → `visual_order_lookup/services/work_order_service.py`
-- [X] [T03&] [US3] Implement WorkOrderService.get_wip_balance(base_id, lot_id, sub_id) returning Optional[WIPBalance] → `visual_order_lookup/services/work_order_service.py`
-- [X] [T03&] [US3] Implement WorkOrderService.get_work_order_hierarchy(base_id, lot_id, sub_id) returning hierarchical structure using recursive query → `visual_order_lookup/services/work_order_service.py`
-- [ ] [T033A] [US3] Implement WorkOrderService.get_work_order_notes(base_id, lot_id) returning Optional[str] with null handling for WORKORDER_BINARY.bits → `visual_order_lookup/services/work_order_service.py`
-- [ ] [T033B] [US3] Implement WorkOrderService.get_requirement_notes(base_id, lot_id, sub_id, operation_seq, part_id) returning Optional[str] for REQUIREMENT_BINARY.bits → `visual_order_lookup/services/work_order_service.py`
-- [X] [T03&] Add input validation (strip whitespace, uppercase, composite key validation) to all service methods → `visual_order_lookup/services/work_order_service.py`
-- [X] [T03&] [P] Add logging for all service method calls with parameters (no sensitive data) → `visual_order_lookup/services/work_order_service.py`
+- [X] [T025] Create WorkOrderService class with __init__(db_connection) → `visual_order_lookup/services/work_order_service.py`
+- [X] [T026] [US1] Implement WorkOrderService.search_work_orders(base_id_pattern, limit=1000) returning List[WorkOrder] → `visual_order_lookup/services/work_order_service.py`
+- [X] [T027] [US2] Implement WorkOrderService.get_work_order_header(base_id, lot_id, sub_id) returning WorkOrder with counts → `visual_order_lookup/services/work_order_service.py`
+- [X] [T028] [US3] Implement WorkOrderService.get_operations(base_id, lot_id, sub_id) returning List[Operation] → `visual_order_lookup/services/work_order_service.py`
+- [X] [T029] [US3] Implement WorkOrderService.get_requirements(base_id, lot_id, sub_id, operation_seq) returning List[Requirement] → `visual_order_lookup/services/work_order_service.py`
+- [X] [T030] [US3] Implement WorkOrderService.get_labor_tickets(base_id, lot_id, sub_id) returning List[LaborTicket] → `visual_order_lookup/services/work_order_service.py`
+- [X] [T031] [US3] Implement WorkOrderService.get_inventory_transactions(base_id, lot_id, sub_id) returning List[InventoryTransaction] → `visual_order_lookup/services/work_order_service.py`
+- [X] [T032] [US3] Implement WorkOrderService.get_wip_balance(base_id, lot_id, sub_id) returning Optional[WIPBalance] → `visual_order_lookup/services/work_order_service.py`
+- [X] [T033] [US3] Implement WorkOrderService.get_work_order_hierarchy(base_id, lot_id, sub_id) returning hierarchical structure using recursive query → `visual_order_lookup/services/work_order_service.py`
+- [X] [T034] [P] Add logging for all service method calls with parameters (no sensitive data) and input validation (strip whitespace, uppercase, composite key validation) to all service methods → `visual_order_lookup/services/work_order_service.py`
 
 ---
 
@@ -79,58 +74,59 @@
 
 ### US2: Display Work Order List (FR-2)
 
-- [X] [T0] [US2] Create QTableWidget for search results with columns: BASE_ID, Date Created, Status, Part Description → `visual_order_lookup/ui/engineering/engineering_module.py`
-- [X] [T0] [US2] Implement populate_work_order_list(results) to display List[WorkOrder] in table → `visual_order_lookup/ui/engineering/engineering_module.py`
-- [X] [T0] [US2] Add row selection handling to load selected work order into tree view → `visual_order_lookup/ui/engineering/engineering_module.py`
-- [X] [T0] [US2] Format date as MM/DD/YYYY, status with [C] prefix, quantity as decimal → `visual_order_lookup/ui/engineering/engineering_module.py`
-- [X] [T0] [US2] Add "No results found" message when search returns empty list → `visual_order_lookup/ui/engineering/engineering_module.py`
+- [X] [T040] [US2] Create QTableWidget for search results with columns: BASE_ID, Date Created, Status, Part Description → `visual_order_lookup/ui/engineering/engineering_module.py`
+- [X] [T041] [US2] Implement populate_work_order_list(results) to display List[WorkOrder] in table → `visual_order_lookup/ui/engineering/engineering_module.py`
+- [X] [T042] [US2] Add row selection handling to load selected work order into tree view → `visual_order_lookup/ui/engineering/engineering_module.py`
+- [X] [T043] [US2] Format date as MM/DD/YYYY, status with [C] prefix, quantity as decimal → `visual_order_lookup/ui/engineering/engineering_module.py`
+- [X] [T044] [US2] Add "No results found" message when search returns empty list → `visual_order_lookup/ui/engineering/engineering_module.py`
 
 ### US3: Hierarchical Tree Display with Lazy Loading (FR-3)
 
-- [X] [T0] [US3] Create WorkOrderTreeWidget extending QTreeWidget with custom node types → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Define TreeNodeData dataclass with node_type, base_id, lot_id, sub_id, operation_seq, part_id, children_loaded flag → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Implement load_work_order_header(base_id, lot_id, sub_id) to create root node with formatted ID, status, part, quantity → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Add 6 placeholder child nodes: Operations, Labor, Materials, WIP, Sub Work Orders (if SUBORD_WO_SUB_ID found) with [+] indicators → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Connect itemExpanded signal to on_item_expanded(item) handler for lazy loading → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Implement on_item_expanded for "Operations" node: check children_loaded flag, call get_operations, create Operation nodes with [sequence] prefix → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Implement on_item_expanded for Operation node: check children_loaded flag, call get_requirements, create Requirement nodes with part_id - description - qty → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Implement on_item_expanded for Requirement node with SUBORD_WO_SUB_ID: recursively load child work order hierarchy → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Implement on_item_expanded for "Labor" node: call get_labor_tickets, create LaborTicket nodes with [LABOR] employee - date - hours → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Implement on_item_expanded for "Materials" node: call get_inventory_transactions, create InventoryTransaction nodes with [MATERIAL] part - type - qty - date → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Implement on_item_expanded for "WIP" node: call get_wip_balance, create WIPBalance child nodes for material/labor/burden costs → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Implement on_item_expanded for "Sub Work Orders" node: call get_work_order_hierarchy, recursively create child work order nodes → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Add setChildIndicatorPolicy(ShowIndicator) to nodes with potential children to force [+] icon → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Store TreeNodeData in item.setData(0, Qt.UserRole, node_data) for all node types → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Set children_loaded=True flag after first expansion to enable caching → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Add loading spinner or "Loading..." text during lazy load queries → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US3] Add error handling for failed lazy load queries with user-friendly error nodes → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T045] [US3] Create WorkOrderTreeWidget extending QTreeWidget with custom node types → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T046] [US3] Define TreeNodeData dataclass with node_type, base_id, lot_id, sub_id, operation_seq, part_id, children_loaded flag → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T047] [US3] Implement load_work_order_header(base_id, lot_id, sub_id) to create root node with formatted ID, status, part, quantity → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T048] [US3] Add 6 placeholder child nodes: Operations, Labor, Materials, WIP, Sub Work Orders (if SUBORD_WO_SUB_ID found) with [+] indicators → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T049] [US3] Connect itemExpanded signal to on_item_expanded(item) handler for lazy loading → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T050] [US3] Implement on_item_expanded for "Operations" node: check children_loaded flag, call get_operations, create Operation nodes with [sequence] prefix → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T051] [US3] Implement on_item_expanded for Operation node: check children_loaded flag, call get_requirements, create Requirement nodes with part_id - description - qty → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T052] [US3] Implement on_item_expanded for Requirement node with SUBORD_WO_SUB_ID: recursively load child work order hierarchy → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T053] [US3] Implement on_item_expanded for "Labor" node: call get_labor_tickets, create LaborTicket nodes with [LABOR] employee - date - hours → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T054] [US3] Implement on_item_expanded for "Materials" node: call get_inventory_transactions, create InventoryTransaction nodes with [MATERIAL] part - type - qty - date → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T055] [US3] Implement on_item_expanded for "WIP" node: call get_wip_balance, create WIPBalance child nodes for material/labor/burden costs → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [ ] [T056] [US3] Implement on_item_expanded for "Sub Work Orders" node: call get_work_order_hierarchy, use SubWorkOrderNode (T053A) to recursively create child work order nodes with depth limit → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T057] [US3] Add setChildIndicatorPolicy(ShowIndicator) to nodes with potential children to force [+] icon → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T058] [US3] Store TreeNodeData in item.setData(0, Qt.UserRole, node_data) for all node types → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T059] [US3] Set children_loaded=True flag after first expansion to enable caching → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T060] [US3] Add loading spinner or "Loading..." text during lazy load queries → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T061] [US3] Add error handling for failed lazy load queries with user-friendly error nodes → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [ ] [T053A] [US3] Create SubWorkOrderNode type for REQUIREMENT nodes with SUBORD_WO_* fields populated: Display child work order BASE_ID/LOT_ID/SUB_ID, add recursion depth tracking (max 10 levels), implement circular reference detection → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
 
 ### US4: Keyboard Navigation (FR-4)
 
-- [X] [T0] [US4] Implement keyPressEvent override in WorkOrderTreeWidget → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US4] Handle Up/Down arrow keys for node selection navigation → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US4] Handle Left arrow key to collapse expanded node or move to parent → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US4] Handle Right arrow key to expand collapsed node or move to first child → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US4] Handle Space key to toggle expand/collapse on selected node → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T062] [US4] Implement keyPressEvent override in WorkOrderTreeWidget → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T063] [US4] Handle Up/Down arrow keys for node selection navigation → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T064] [US4] Handle Left arrow key to collapse expanded node or move to parent → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T065] [US4] Handle Right arrow key to expand collapsed node or move to first child → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T066] [US4] Handle Space key to toggle expand/collapse on selected node → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
 
 ### US5: Expand/Collapse All (FR-5)
 
-- [X] [T0] [US5] Add "Expand All" button to EngineeringModule toolbar → `visual_order_lookup/ui/engineering/engineering_module.py`
-- [X] [T0] [US5] Add "Collapse All" button to EngineeringModule toolbar → `visual_order_lookup/ui/engineering/engineering_module.py`
-- [X] [T0] [US5] Implement expand_all() to recursively expand all nodes, triggering lazy loads → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US5] Implement collapse_all() to collapse all nodes except root header → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US5] Add progress indicator for Expand All operation (may take 2+ seconds for large trees) → `visual_order_lookup/ui/engineering/engineering_module.py`
+- [X] [T067] [US5] Add "Expand All" button to EngineeringModule toolbar → `visual_order_lookup/ui/engineering/engineering_module.py`
+- [X] [T068] [US5] Add "Collapse All" button to EngineeringModule toolbar → `visual_order_lookup/ui/engineering/engineering_module.py`
+- [X] [T069] [US5] Implement expand_all() to recursively expand all nodes, triggering lazy loads → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T070] [US5] Implement collapse_all() to collapse all nodes except root header → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T071] [US5] Add progress indicator for Expand All operation (may take 2+ seconds for large trees) → `visual_order_lookup/ui/engineering/engineering_module.py`
 
 ### US6: CSV Export (FR-6)
 
-- [X] [T0] [US6] Add "Export to CSV" button to EngineeringModule toolbar → `visual_order_lookup/ui/engineering/engineering_module.py`
-- [X] [T0] [US6] Create export_tree_to_csv() method with QFileDialog for save location → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US6] Generate default filename: workorder_{base_id}_{lot_id}_{YYYYMMDD}.csv → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US6] Implement recursive tree traversal to collect all visible nodes with level tracking → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US6] Create CSV with columns: Level, Type, ID, Description, Quantity, Details → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US6] Add indentation in first column (Level) to show hierarchy visually → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US6] Format dates, quantities, costs consistently with tree display → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
-- [X] [T0] [US6] Add error handling for file write failures with user notification → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T072] [US6] Add "Export to CSV" button to EngineeringModule toolbar → `visual_order_lookup/ui/engineering/engineering_module.py`
+- [X] [T073] [US6] Create export_tree_to_csv() method with QFileDialog for save location → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T074] [US6] Generate default filename: workorder_{base_id}_{lot_id}_{YYYYMMDD}.csv → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T075] [US6] Implement recursive tree traversal to collect all visible nodes with level tracking → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T076] [US6] Create CSV with columns: Level, Type, ID, Description, Quantity, Details → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T077] [US6] Add indentation in first column (Level) to show hierarchy visually → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T078] [US6] Format dates, quantities, costs consistently with tree display → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
+- [X] [T079] [US6] Add error handling for file write failures with user notification → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
 
 ---
 
@@ -189,7 +185,7 @@
 ### Performance Optimization
 
 - [ ] [T107] Profile query performance with EXPLAIN PLAN for all 8 queries, ensure indexes on FK columns → `visual_order_lookup/database/queries/work_order_queries.py`
-- [ ] [T108] Optimize recursive hierarchy query to prevent infinite loops on circular SUBORD_WO_SUB_ID references → `visual_order_lookup/database/queries/work_order_queries.py`
+- [ ] [T108] Optimize recursive hierarchy query with max recursion depth 10 (matching T053A) and circular reference detection on SUBORD_WO_SUB_ID → `visual_order_lookup/database/queries/work_order_queries.py`
 - [ ] [T109] Add query result caching for get_work_order_header (header data doesn't change) → `visual_order_lookup/services/work_order_service.py`
 - [ ] [T110] Implement virtual scrolling optimization for trees with 1000+ nodes (Qt provides automatically, verify) → `visual_order_lookup/ui/engineering/work_order_tree_widget.py`
 - [ ] [T111] Add pagination for search results if >1000 work orders match BASE_ID pattern → `visual_order_lookup/ui/engineering/engineering_module.py`
@@ -221,7 +217,7 @@
 
 ## Task Summary
 
-- **Total Tasks**: 129
+- **Total Tasks**: 126 (removed 4 binary note tasks: T023A, T023B, T033A, T033B; added 1 task: T053A)
 - **Parallelizable Tasks**: 31 (marked with [P])
 - **User Story Tasks**: 95 (marked with [US1] through [US6])
 - **Acceptance Test Tasks**: 8 (marked with [AT1] through [AT8])
@@ -243,8 +239,9 @@
 
 ## Notes
 
-- SUBORD_WO_SUB_ID discovery adds recursive hierarchy feature to FR-3
-- Lazy loading critical for performance (Constitutional requirement: <15s total)
-- All queries MUST use WITH (NOLOCK) for read-only access (Constitutional Principle III)
+- SUBORD_WO_SUB_ID discovery adds recursive hierarchy feature to FR-3 with max depth 10 levels
+- Lazy loading critical for performance (Constitution requirement: <15s total)
+- All queries MUST use WITH (NOLOCK) for read-only access (Constitution Principle III)
+- Binary note tables (WORKORDER_BINARY, REQUIREMENT_BINARY) deferred to future enhancement
 - Tree node caching prevents re-querying on collapse/re-expand
 - CSV export follows existing pattern from part_detail_view.py

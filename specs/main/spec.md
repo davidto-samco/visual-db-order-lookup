@@ -37,7 +37,7 @@ In VISUAL Enterprise, the Manufacturing Window module provides comprehensive wor
 - Export work order details to CSV
 
 **Out of Scope:**
-- Creating or editing work orders (read-only per Constitution III)
+- Creating or editing work orders (read-only per Constitution Principle III)
 - Modifying BOMs or routing
 - Production scheduling
 - Shop floor control
@@ -106,10 +106,10 @@ The work order tree displays 7 different node types arranged in 4 hierarchy leve
 **Level 3 (special case) - Sub Work Orders**
 - Node: Appears under Requirements when `SUBORD_WO_BASE_ID`, `SUBORD_WO_LOT_ID`, `SUBORD_WO_SUB_ID` are populated
 - Represents child work order assembly steps
-- Displays child work order identifier with expandable tree
+- Displays child work order identifier with expandable tree (recursive up to 10 levels deep)
 - Shows: Child work order dates (SCHED_START_DATE, SCHED_FINISH_DATE)
 - Quantity comes from child work order's DESIRED_QTY field
-- Notes retrieved from REQUIREMENT_BINARY.bits column (cast from image type)
+- Circular reference detection prevents infinite loops
 
 **FR-4: Tree Interaction**
 - Click `[+]` icon to expand node
@@ -134,12 +134,12 @@ The work order tree displays 7 different node types arranged in 4 hierarchy leve
 **NFR-1: Performance**
 - Work order search MUST complete within 5 seconds
 - Tree rendering MUST complete within 2 seconds for 500 nodes
-- Expand/collapse operations MUST feel instant (<100ms)
+- Expand/collapse operations MUST complete within 100ms (measured from user action to UI update)
 - Total load time (search + render) MUST not exceed 10 seconds
 
 **NFR-2: Database Access**
-- Read-only access to Visual database (Constitutional requirement)
-- Query tables: WORK_ORDER, OPERATION, REQUIREMENT, PART, LABOR_TICKET, INVENTORY_TRANS, WIP_BALANCE, WORKORDER_BINARY, REQUIREMENT_BINARY
+- Read-only access to Visual database (Constitution Principle III requirement)
+- Query tables: WORK_ORDER, OPERATION, REQUIREMENT, PART, LABOR_TICKET, INVENTORY_TRANS, WIP_BALANCE (7 tables)
 - Use WITH (NOLOCK) hint for all queries
 - Parameterized queries to prevent SQL injection
 
@@ -216,22 +216,10 @@ The work order tree displays 7 different node types arranged in 4 hierarchy leve
 - `BURDEN_COST` (decimal)
 - `TOTAL_COST` (decimal)
 
-**WORKORDER_BINARY** (Work order notes)
-- `WORKORDER_BASE_ID` (varchar 30, FK to WORK_ORDER.BASE_ID)
-- `WORKORDER_LOT_ID` (varchar 30, FK to WORK_ORDER.LOT_ID)
-- `bits` (image) - Work order notes stored as binary data
-- **Note**: Requires two-step cast to retrieve text: `CAST(CAST(bits AS VARBINARY(MAX)) AS VARCHAR(MAX))`
-
-**REQUIREMENT_BINARY** (Requirement notes)
-- `WORKORDER_BASE_ID`, `WORKORDER_LOT_ID`, `WORKORDER_SUB_ID` (FK to WORK_ORDER)
-- `OPERATION_SEQ_NO` (smallint, FK to OPERATION.SEQUENCE)
-- `PART_ID` (varchar 30, FK to REQUIREMENT.PART_ID)
-- `bits` (image) - Requirement notes stored as binary data
-- **Note**: Requires two-step cast to retrieve text: `CAST(CAST(bits AS VARBINARY(MAX)) AS VARCHAR(MAX))`
 
 ### Query Patterns
 
-**Note**: Sample queries shown below. Complete implementation includes 8 query functions (search, header, operations, requirements, labor, inventory, WIP, hierarchy) - see `visual_order_lookup/database/queries/work_order_queries.py` for full set.
+**Note**: Sample queries shown below. Complete implementation includes 8 query functions (search, header, operations, requirements, labor, inventory, WIP, hierarchy) - see `visual_order_lookup/database/queries/work_order_queries.py` for full set. Binary note tables (WORKORDER_BINARY, REQUIREMENT_BINARY) excluded from initial scope.
 
 **Work Order Search:**
 ```sql
@@ -300,7 +288,7 @@ ORDER BY r.PART_ID
 5. Tree supports keyboard navigation (arrows, space, enter)
 6. Export generates CSV with correct hierarchy indentation
 7. Performance: 500-node tree renders in <2 seconds
-8. No database write operations (Constitutional compliance)
+8. No database write operations (Constitution compliance)
 9. UI matches existing Inventory/Sales module styling
 
 ## Acceptance Tests
@@ -364,12 +352,12 @@ ORDER BY r.PART_ID
 - **When**: User expands all nodes
 - **Then**: Tree renders within 2 seconds
 - **When**: User collapses a node
-- **Then**: Response feels instant (<100ms)
+- **Then**: Response completes within 100ms
 
 ## Dependencies
 
 - Existing application infrastructure (database connection, PyQt6)
-- Visual database tables: WORK_ORDER, OPERATION, REQUIREMENT, PART, LABOR_TICKET, INVENTORY_TRANS, WIP_BALANCE (primary), WORKORDER_BINARY, REQUIREMENT_BINARY (binary notes)
+- Visual database tables: WORK_ORDER, OPERATION, REQUIREMENT, PART, LABOR_TICKET, INVENTORY_TRANS, WIP_BALANCE
 - PyQt6 QTreeWidget for hierarchical display
 - CSV export functionality (similar to existing modules)
 
@@ -378,7 +366,7 @@ ORDER BY r.PART_ID
 **Risk**: Large work orders (1000+ nodes) may cause UI lag
 - **Mitigation**: Implement lazy loading (only load expanded nodes) + virtual scrolling + pagination for top-level results
 
-**Risk**: Complex joins across 7 tables may slow queries
+**Risk**: Complex joins across 7 core transactional tables may slow queries
 - **Mitigation**: Separate queries per level (lazy load), use database indexes on FK columns, implement 5-second timeout
 
 **Risk**: Tree control may not match VISUAL Enterprise visual appearance exactly
@@ -415,5 +403,3 @@ None - all technical details resolved through screenshots and database analysis.
 - **Inventory Transaction**: Material issue/return record for a work order
 - **WIP Balance**: Work-in-progress cost accumulation (material + labor + burden)
 - **Lazy Loading**: Loading child tree nodes only when expanded (performance optimization)
-- **WORKORDER_BINARY**: Table containing work order notes in image-type `bits` column
-- **REQUIREMENT_BINARY**: Table containing requirement notes in image-type `bits` column
