@@ -5,7 +5,8 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QTextBrowser,
     QTableWidget, QTableWidgetItem, QHeaderView, QLabel, QPushButton,
-    QFileDialog, QMessageBox, QComboBox, QSpinBox
+    QFileDialog, QMessageBox, QComboBox, QSpinBox, QRadioButton,
+    QGroupBox, QButtonGroup
 )
 from PyQt6.QtCore import Qt
 from typing import List, Optional
@@ -78,9 +79,9 @@ class PartDetailView(QWidget):
         where_used_layout.setContentsMargins(0, 0, 0, 0)
 
         self.where_used_table = QTableWidget()
-        self.where_used_table.setColumnCount(6)
+        self.where_used_table.setColumnCount(8)
         self.where_used_table.setHorizontalHeaderLabels([
-            "Date", "Order/WO", "Customer", "Quantity", "Warehouse", "Location"
+            "Work Order/Master", "Seq #", "Piece #", "Quantity Per", "Fixed Qty", "Scrap %", "Manufactured PART ID", "MFG PART DESCRIPTION"
         ])
         self.where_used_table.horizontalHeader().setStretchLastSection(True)
         self.where_used_table.setAlternatingRowColors(True)
@@ -133,10 +134,61 @@ class PartDetailView(QWidget):
         purchase_history_layout = QVBoxLayout(purchase_history_widget)
         purchase_history_layout.setContentsMargins(0, 0, 0, 0)
 
+        # Sort controls layout
+        sort_controls_layout = QHBoxLayout()
+
+        # Sort by group
+        sort_by_group = QGroupBox("Sort")
+        sort_by_layout = QVBoxLayout()
+        self.ph_sort_by_button_group = QButtonGroup()
+
+        self.ph_sort_by_order_date = QRadioButton("By order date")
+        self.ph_sort_by_order_date.setChecked(True)  # Default
+        self.ph_sort_by_button_group.addButton(self.ph_sort_by_order_date, 0)
+        sort_by_layout.addWidget(self.ph_sort_by_order_date)
+
+        self.ph_sort_by_recv_date = QRadioButton("By desired recv date")
+        self.ph_sort_by_button_group.addButton(self.ph_sort_by_recv_date, 1)
+        sort_by_layout.addWidget(self.ph_sort_by_recv_date)
+
+        self.ph_sort_by_po = QRadioButton("By purchase order")
+        self.ph_sort_by_button_group.addButton(self.ph_sort_by_po, 2)
+        sort_by_layout.addWidget(self.ph_sort_by_po)
+
+        sort_by_group.setLayout(sort_by_layout)
+        sort_controls_layout.addWidget(sort_by_group)
+
+        # Sequence (sort order) group
+        sequence_group = QGroupBox("Sequence")
+        sequence_layout = QVBoxLayout()
+        self.ph_sequence_button_group = QButtonGroup()
+
+        self.ph_sequence_desc = QRadioButton("Descending")
+        self.ph_sequence_desc.setChecked(True)  # Default
+        self.ph_sequence_button_group.addButton(self.ph_sequence_desc, 0)
+        sequence_layout.addWidget(self.ph_sequence_desc)
+
+        self.ph_sequence_asc = QRadioButton("Ascending")
+        self.ph_sequence_button_group.addButton(self.ph_sequence_asc, 1)
+        sequence_layout.addWidget(self.ph_sequence_asc)
+
+        sequence_group.setLayout(sequence_layout)
+        sort_controls_layout.addWidget(sequence_group)
+
+        sort_controls_layout.addStretch()
+
+        purchase_history_layout.addLayout(sort_controls_layout)
+
+        # Connect sort controls to refresh method
+        self.ph_sort_by_button_group.buttonClicked.connect(self._on_purchase_history_sort_changed)
+        self.ph_sequence_button_group.buttonClicked.connect(self._on_purchase_history_sort_changed)
+
+        # Purchase history table
         self.purchase_history_table = QTableWidget()
-        self.purchase_history_table.setColumnCount(7)
+        self.purchase_history_table.setColumnCount(10)
         self.purchase_history_table.setHorizontalHeaderLabels([
-            "PO Date", "PO Number", "Vendor", "Qty", "Unit Price", "Total", "Last Received"
+            "PO Date", "PO Number", "Vendor", "Qty", "Unit Price", "Total", "Last Received",
+            "Currency", "Disc%", "Whsale Unit Cost"
         ])
         self.purchase_history_table.horizontalHeader().setStretchLastSection(True)
         self.purchase_history_table.setAlternatingRowColors(True)
@@ -327,31 +379,42 @@ class PartDetailView(QWidget):
                 # Populate rows
                 for row, record in enumerate(page_records):
                     try:
-                        # Date
-                        date_item = QTableWidgetItem(record.formatted_date() if hasattr(record, 'formatted_date') else str(record.transaction_date))
-                        self.where_used_table.setItem(row, 0, date_item)
+                        # Work Order/Master
+                        wo_item = QTableWidgetItem(record.formatted_work_order())
+                        self.where_used_table.setItem(row, 0, wo_item)
 
-                        # Order/WO reference
-                        ref_item = QTableWidgetItem(str(record.order_reference or ""))
-                        self.where_used_table.setItem(row, 1, ref_item)
+                        # Seq #
+                        seq_item = QTableWidgetItem(record.formatted_seq_no())
+                        seq_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        self.where_used_table.setItem(row, 1, seq_item)
 
-                        # Customer
-                        cust_item = QTableWidgetItem(str(record.customer_name or "N/A"))
-                        self.where_used_table.setItem(row, 2, cust_item)
+                        # Piece #
+                        piece_item = QTableWidgetItem(record.formatted_piece_no())
+                        piece_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        self.where_used_table.setItem(row, 2, piece_item)
 
-                        # Quantity
-                        qty_text = record.formatted_quantity() if hasattr(record, 'formatted_quantity') else str(record.quantity)
-                        qty_item = QTableWidgetItem(qty_text)
-                        qty_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                        self.where_used_table.setItem(row, 3, qty_item)
+                        # Quantity Per
+                        qty_per_item = QTableWidgetItem(record.formatted_qty_per())
+                        qty_per_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        self.where_used_table.setItem(row, 3, qty_per_item)
 
-                        # Warehouse
-                        wh_item = QTableWidgetItem(str(record.warehouse_id or "N/A"))
-                        self.where_used_table.setItem(row, 4, wh_item)
+                        # Fixed Qty
+                        fixed_qty_item = QTableWidgetItem(record.formatted_fixed_qty())
+                        fixed_qty_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        self.where_used_table.setItem(row, 4, fixed_qty_item)
 
-                        # Location
-                        loc_item = QTableWidgetItem(str(record.location_id or "N/A"))
-                        self.where_used_table.setItem(row, 5, loc_item)
+                        # Scrap %
+                        scrap_item = QTableWidgetItem(record.formatted_scrap_percent())
+                        scrap_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        self.where_used_table.setItem(row, 5, scrap_item)
+
+                        # Manufactured PART ID
+                        part_id_item = QTableWidgetItem(record.formatted_manufactured_part_id())
+                        self.where_used_table.setItem(row, 6, part_id_item)
+
+                        # MFG PART DESCRIPTION
+                        part_desc_item = QTableWidgetItem(record.formatted_manufactured_part_description())
+                        self.where_used_table.setItem(row, 7, part_desc_item)
 
                     except Exception as e:
                         import logging
@@ -471,6 +534,19 @@ class PartDetailView(QWidget):
                 # Last Received
                 self.purchase_history_table.setItem(row, 6, QTableWidgetItem(record.formatted_received_date()))
 
+                # Currency
+                self.purchase_history_table.setItem(row, 7, QTableWidgetItem(record.formatted_currency()))
+
+                # Disc%
+                disc_pct_item = QTableWidgetItem(record.formatted_disc_percent())
+                disc_pct_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.purchase_history_table.setItem(row, 8, disc_pct_item)
+
+                # Whsale Unit Cost
+                std_cost_item = QTableWidgetItem(record.formatted_standard_unit_cost())
+                std_cost_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.purchase_history_table.setItem(row, 9, std_cost_item)
+
             # Resize columns to content
             self.purchase_history_table.resizeColumnsToContents()
 
@@ -504,6 +580,37 @@ class PartDetailView(QWidget):
         else:
             self.purchase_history_page = max(0, min(page, total_pages - 1))
 
+        self._refresh_purchase_history_page()
+
+    def _on_purchase_history_sort_changed(self):
+        """Handle purchase history sort control changes.
+
+        Applies the selected sort field and order to the purchase history records,
+        then refreshes the display.
+        """
+        if not self.purchase_history_records:
+            return
+
+        # Get selected sort field
+        sort_by_id = self.ph_sort_by_button_group.checkedId()
+        # Get selected sort order
+        sequence_id = self.ph_sequence_button_group.checkedId()
+
+        # Determine sort key function based on selected sort field
+        if sort_by_id == 0:  # By order date
+            key_func = lambda record: record.order_date
+        elif sort_by_id == 1:  # By desired recv date
+            # Handle None dates by sorting them to end
+            key_func = lambda record: (record.desired_receive_date is None, record.desired_receive_date or record.order_date)
+        else:  # By purchase order (sort_by_id == 2)
+            key_func = lambda record: record.po_number
+
+        # Sort records
+        reverse = (sequence_id == 0)  # Descending if id is 0, Ascending if id is 1
+        self.purchase_history_records.sort(key=key_func, reverse=reverse)
+
+        # Reset to first page after sorting
+        self.purchase_history_page = 0
         self._refresh_purchase_history_page()
 
     def _export_part_info(self):
@@ -546,7 +653,7 @@ class PartDetailView(QWidget):
     def _export_where_used(self):
         """Export Where Used tab as CSV file."""
         if not self.where_used_records:
-            QMessageBox.warning(self, "No Data", "No where-used records to export.")
+            QMessageBox.warning(self, "No Data", "No BOM usage records to export.")
             return
 
         # Prompt for save location
@@ -566,18 +673,20 @@ class PartDetailView(QWidget):
 
                 # Write header
                 writer.writerow([
-                    "Date", "Order/WO", "Customer", "Quantity", "Warehouse", "Location"
+                    "Work Order/Master", "Seq #", "Piece #", "Quantity Per", "Fixed Qty", "Scrap %", "Manufactured PART ID", "MFG PART DESCRIPTION"
                 ])
 
                 # Write data rows
                 for record in self.where_used_records:
                     writer.writerow([
-                        record.formatted_date(),
-                        record.order_reference,
-                        record.customer_name or "N/A",
-                        record.formatted_quantity(),
-                        record.warehouse_id or "N/A",
-                        record.location_id or "N/A"
+                        record.formatted_work_order(),
+                        record.formatted_seq_no(),
+                        record.formatted_piece_no(),
+                        record.formatted_qty_per(),
+                        record.formatted_fixed_qty(),
+                        record.formatted_scrap_percent(),
+                        record.formatted_manufactured_part_id(),
+                        record.formatted_manufactured_part_description()
                     ])
 
             QMessageBox.information(
@@ -615,7 +724,8 @@ class PartDetailView(QWidget):
 
                 # Write header
                 writer.writerow([
-                    "PO Date", "PO Number", "Vendor", "Qty", "Unit Price", "Total", "Last Received"
+                    "PO Date", "PO Number", "Vendor", "Qty", "Unit Price", "Total", "Last Received",
+                    "Currency", "Disc%", "Whsale Unit Cost"
                 ])
 
                 # Write data rows
@@ -627,7 +737,10 @@ class PartDetailView(QWidget):
                         record.formatted_quantity(),
                         record.formatted_unit_price(),
                         record.formatted_line_total(),
-                        record.formatted_received_date()
+                        record.formatted_received_date(),
+                        record.formatted_currency(),
+                        record.formatted_disc_percent(),
+                        record.formatted_standard_unit_cost()
                     ])
 
             QMessageBox.information(

@@ -50,11 +50,21 @@ class WorkOrderTreeWidget(QTreeWidget):
 
         self.service = service
         self.current_work_order: Optional[WorkOrder] = None
+        self.detailed_view = False  # Toggle between simplified and detailed view
 
         self._setup_ui()
         self._connect_signals()
 
         logger.debug("WorkOrderTreeWidget initialized")
+
+    def set_detailed_view(self, detailed: bool):
+        """Set the view mode.
+
+        Args:
+            detailed: True for detailed view, False for simplified view
+        """
+        self.detailed_view = detailed
+        logger.debug(f"View mode changed to: {'detailed' if detailed else 'simplified'}")
 
     def _setup_ui(self):
         """Configure tree widget appearance."""
@@ -81,6 +91,8 @@ class WorkOrderTreeWidget(QTreeWidget):
         T047: Implement load_work_order_header
         T048: Add 6 placeholder child nodes
         """
+        view_mode = "DETAILED" if self.detailed_view else "SIMPLIFIED"
+        logger.info(f"📋 Loading work order in {view_mode} view mode")
         self.clear()
         self.current_work_order = work_order
 
@@ -101,8 +113,9 @@ class WorkOrderTreeWidget(QTreeWidget):
         else:
             header.setText(1, qty_text)
 
-        # Column 2: Date calculations
+        # Column 2: Details - Show dates in both simplified and detailed view
         # Format: -77, 8/15/2011(10/31/2011) - 1/13/2011(10/16/2011)
+        logger.debug(f"Setting dates for work order root")
         header.setText(2, work_order.formatted_dates())
 
         # Store metadata (T058) - Set up for lazy loading requirements directly
@@ -146,11 +159,24 @@ class WorkOrderTreeWidget(QTreeWidget):
         self.expandItem(loading_item)
 
         try:
-            # Load based on node type (simplified for legacy structure match)
+            # Load based on node type
             if node_data.node_type == "WORK_ORDER_ROOT":
-                self._load_all_requirements(item, node_data)
+                # Different behavior for simplified vs detailed view
+                if self.detailed_view:
+                    # Detailed view: Show operations → requirements
+                    self._load_operations(item, node_data)
+                else:
+                    # Simplified view: Show only sub-work-orders (original behavior)
+                    self._load_all_requirements(item, node_data)
             elif node_data.node_type == "SUB_WORK_ORDER":
-                self._load_all_requirements(item, node_data)
+                # Load sub-work-order children (recursive)
+                if self.detailed_view:
+                    self._load_operations(item, node_data)
+                else:
+                    self._load_all_requirements(item, node_data)
+            elif node_data.node_type == "OPERATION":
+                # Load requirements for this operation
+                self._load_requirements(item, node_data)
 
             # Mark as loaded (T059)
             node_data.children_loaded = True
@@ -239,6 +265,7 @@ class WorkOrderTreeWidget(QTreeWidget):
 
         T050: Load operations with [sequence] prefix
         """
+        logger.info(f"⚙️  Loading operations in {'DETAILED' if self.detailed_view else 'SIMPLIFIED'} view mode")
         operations = self.service.get_operations(
             node_data.base_id,
             node_data.lot_id,
@@ -251,11 +278,26 @@ class WorkOrderTreeWidget(QTreeWidget):
             no_data_item.setDisabled(True)
             return
 
+        logger.info(f"  Creating {len(operations)} operation nodes...")
+
         for op in operations:
             op_item = QTreeWidgetItem(item)
             op_item.setText(0, op.formatted_display())
-            op_item.setText(1, f"Status: {op.status or 'N/A'}")
-            op_item.setText(2, f"Reqs: {op.requirement_count}")
+            logger.debug(f"  - Operation {op.sequence}: {op.description[:40] if op.description else op.operation_id}")
+
+            # Column 1: Leave empty in both views (or show minimal info in simplified)
+            op_item.setText(1, "")
+
+            # Column 2: Details (varies by view mode)
+            if self.detailed_view:
+                # Detailed view: Show status and hours information matching screenshot
+                op_item.setText(2, op.formatted_details())
+                logger.debug(f"DETAILED VIEW: Operation {op.sequence} - hours: {op.formatted_details()}")
+            else:
+                # Simplified view: Show requirement count (M-parts + sub-WOs only)
+                # Count will be lower since we filter in simplified view
+                op_item.setText(2, f"{op.requirement_count} items")
+                logger.debug(f"SIMPLIFIED VIEW: Operation {op.sequence} - {op.requirement_count} items (filtered)")
 
             # T057: Show indicator if operation has requirements
             op_item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
@@ -270,7 +312,7 @@ class WorkOrderTreeWidget(QTreeWidget):
             )
             op_item.setData(0, Qt.ItemDataRole.UserRole, op_node_data)
 
-        logger.debug(f"Loaded {len(operations)} operations")
+        logger.info(f"✅ Loaded {len(operations)} operation nodes successfully")
 
     def _load_requirements(self, item: QTreeWidgetItem, node_data: TreeNodeData):
         """Load requirements for operation.
@@ -291,28 +333,177 @@ class WorkOrderTreeWidget(QTreeWidget):
             no_data_item.setDisabled(True)
             return
 
+        # Count before filtering
+        total_count = len(requirements)
+        logger.info(f"")
+        logger.info(f"{'='*80}")
+        logger.info(f"{'DETAILED' if self.detailed_view else 'SIMPLIFIED'} VIEW: Loaded {total_count} requirements for operation {node_data.operation_seq}")
+        logger.info(f"Detailed view flag: {self.detailed_view}")
+        logger.info(f"{'='*80}")
+
+        shown_count = 0
+        filtered_count = 0
         for req in requirements:
+            # FILTERING LOGIC: Simplified view only shows M-prefix parts and sub-work-orders
+            if not self.detailed_view:
+                # Simplified view: Filter out purchased parts (R, F, P, etc.)
+                # Only show:
+                # 1. Sub-work-orders (has SUBORD_WO_SUB_ID)
+                # 2. Manufactured parts (part_id starts with 'M')
+                if not req.has_child_work_order():
+                    # Not a sub-work-order, check if it's a manufactured part
+                    if not req.part_id or not req.part_id.startswith('M'):
+                        # Skip purchased/other parts in simplified view
+                        filtered_count += 1
+                        logger.info(f"  ❌ SIMPLIFIED: Filtered out {req.part_id} ({req.part_description[:30] if req.part_description else 'No desc'})")
+                        continue
+                    else:
+                        logger.info(f"  ✓ SIMPLIFIED: Showing M-part {req.part_id}")
+                else:
+                    logger.info(f"  ✓ SIMPLIFIED: Showing sub-WO {req.subord_wo_sub_id}")
+            else:
+                # Detailed view - show everything
+                part_display = req.part_id if req.part_id else f"SUB-WO-{req.subord_wo_sub_id}"
+                has_child = "with child WO" if req.has_child_work_order() else "regular part"
+                logger.info(f"  ✓ DETAILED: Showing {part_display} ({has_child})")
+
+            shown_count += 1
             req_item = QTreeWidgetItem(item)
             req_item.setText(0, req.formatted_display())
+
+            # Column 1: Quantity (always shown)
             req_item.setText(1, req.formatted_qty())
-            req_item.setText(2, f"Type: {req.part_type or 'N/A'}")
+
+            # Column 2: Details (varies by view mode)
+            if self.detailed_view:
+                # Detailed view: Show full details matching screenshot
+                if req.has_child_work_order():
+                    # Sub-work-order: Show date range
+                    req_item.setText(2, req.formatted_dates())
+                    logger.debug(f"DETAILED VIEW: Req (sub-WO) - dates: {req.formatted_dates()}")
+                else:
+                    # Regular part: Show status and quantity details
+                    req_item.setText(2, req.formatted_details())
+                    logger.debug(f"DETAILED VIEW: Req (part {req.part_id}) - details: {req.formatted_details()}")
+            else:
+                # Simplified view: Show simplified details for M-parts and sub-WOs
+                if req.has_child_work_order():
+                    # Sub-work-order: Show dates even in simplified
+                    req_item.setText(2, req.formatted_dates())
+                else:
+                    # M-parts: Show type
+                    req_item.setText(2, f"Type: {req.part_type or 'Mfg'}")
+                logger.debug(f"SIMPLIFIED VIEW: Showing part {req.part_id}")
 
             # T052: Check for child work order via SUBORD_WO_SUB_ID
             if req.has_child_work_order():
-                # Show indicator for child work order
-                req_item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
+                if self.detailed_view:
+                    # Detailed view: ALWAYS expandable to show operations
+                    req_item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
 
-                # Store data for recursive loading
-                req_node_data = TreeNodeData(
-                    node_type="REQUIREMENT_WITH_CHILD_WO",
-                    base_id=node_data.base_id,
-                    lot_id=node_data.lot_id,
-                    sub_id=req.subord_wo_sub_id,  # Child work order SUB_ID
-                    part_id=req.part_id
-                )
-                req_item.setData(0, Qt.ItemDataRole.UserRole, req_node_data)
+                    # Store data for loading sub-work-order's operations directly
+                    req_node_data = TreeNodeData(
+                        node_type="SUB_WORK_ORDER",
+                        base_id=node_data.base_id,
+                        lot_id=node_data.lot_id,
+                        sub_id=req.subord_wo_sub_id,  # Child work order SUB_ID
+                        part_id=req.part_id,
+                        children_loaded=False
+                    )
+                    req_item.setData(0, Qt.ItemDataRole.UserRole, req_node_data)
+                    logger.debug(f"  → Sub-WO {req.subord_wo_sub_id} is expandable (detailed view)")
+                else:
+                    # Simplified view: Only expandable if it has children (other sub-work-orders)
+                    # Check if this sub-work-order has child sub-work-orders
+                    try:
+                        child_requirements = self.service.get_requirements_by_sub_id(
+                            node_data.base_id,
+                            node_data.lot_id,
+                            req.subord_wo_sub_id
+                        )
+                        has_children = any(child_req.has_child_work_order() for child_req in child_requirements)
 
-        logger.debug(f"Loaded {len(requirements)} requirements")
+                        if has_children:
+                            # Has child sub-work-orders - make it expandable
+                            req_item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
+
+                            req_node_data = TreeNodeData(
+                                node_type="SUB_WORK_ORDER",
+                                base_id=node_data.base_id,
+                                lot_id=node_data.lot_id,
+                                sub_id=req.subord_wo_sub_id,
+                                part_id=req.part_id,
+                                children_loaded=False
+                            )
+                            req_item.setData(0, Qt.ItemDataRole.UserRole, req_node_data)
+                            logger.debug(f"  → Sub-WO {req.subord_wo_sub_id} is expandable (has {len([r for r in child_requirements if r.has_child_work_order()])} child sub-WOs)")
+                        else:
+                            # No children - it's a leaf node in simplified view
+                            logger.debug(f"  → Sub-WO {req.subord_wo_sub_id} is leaf node (no child sub-WOs)")
+                    except Exception as e:
+                        # If query fails, make it expandable to allow user to try
+                        logger.warning(f"Could not check children for sub-WO {req.subord_wo_sub_id}: {e}")
+                        req_item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
+
+                        req_node_data = TreeNodeData(
+                            node_type="SUB_WORK_ORDER",
+                            base_id=node_data.base_id,
+                            lot_id=node_data.lot_id,
+                            sub_id=req.subord_wo_sub_id,
+                            part_id=req.part_id,
+                            children_loaded=False
+                        )
+                        req_item.setData(0, Qt.ItemDataRole.UserRole, req_node_data)
+
+        logger.info(f"")
+        logger.info(f"{'='*80}")
+        logger.info(f"{'DETAILED' if self.detailed_view else 'SIMPLIFIED'} VIEW SUMMARY:")
+        logger.info(f"  Total requirements: {total_count}")
+        logger.info(f"  Shown: {shown_count}")
+        logger.info(f"  Filtered out: {filtered_count}")
+        logger.info(f"{'='*80}")
+        logger.info(f"")
+
+    def _load_sub_work_order(self, item: QTreeWidgetItem, node_data: TreeNodeData):
+        """Load sub-work-order when requirement is expanded.
+
+        Creates a child work order node and sets it up for lazy loading operations.
+        """
+        logger.info(f"📦 Loading sub-work-order: {node_data.base_id}-{node_data.sub_id}/{node_data.lot_id}")
+
+        # Load the sub-work-order header
+        sub_wo = self.service.get_work_order_header(
+            node_data.base_id,
+            node_data.lot_id,
+            node_data.sub_id
+        )
+
+        if not sub_wo:
+            no_data_item = QTreeWidgetItem(item)
+            no_data_item.setText(0, "Sub-work-order not found")
+            no_data_item.setDisabled(True)
+            return
+
+        # Create sub-work-order node
+        sub_wo_item = QTreeWidgetItem(item)
+        sub_wo_item.setText(0, f"{sub_wo.formatted_status()} {sub_wo.formatted_id()} {sub_wo.part_description or sub_wo.part_id}")
+        sub_wo_item.setText(1, sub_wo.formatted_qty())
+        if self.detailed_view:
+            sub_wo_item.setText(2, sub_wo.formatted_dates())
+        else:
+            sub_wo_item.setText(2, f"{sub_wo.operation_count} ops")
+
+        # Set up for lazy loading operations
+        sub_wo_item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
+
+        sub_wo_node_data = TreeNodeData(
+            node_type="SUB_WORK_ORDER",
+            base_id=node_data.base_id,
+            lot_id=node_data.lot_id,
+            sub_id=node_data.sub_id,
+            children_loaded=False
+        )
+        sub_wo_item.setData(0, Qt.ItemDataRole.UserRole, sub_wo_node_data)
 
     def _load_labor_tickets(self, item: QTreeWidgetItem, node_data: TreeNodeData):
         """Load labor transactions for work order.

@@ -1,0 +1,287 @@
+# WorkOrderService API Contract
+# Feature: 003-engineering-work-order-hierarchy
+# Date: 2025-01-14
+
+service:
+  name: WorkOrderService
+  description: Service for retrieving work order hierarchical data from Visual database
+  language: Python
+  version: 1.0.0
+
+dependencies:
+  - DatabaseConnection
+  - work_order_queries (SQL module)
+  - models (WorkOrder, Operation, Requirement, etc.)
+
+methods:
+  # ========== Search and Header Methods ==========
+
+  - name: search_work_orders
+    description: Search for work orders by BASE_ID pattern
+    parameters:
+      - name: base_id_pattern
+        type: str
+        required: true
+        description: BASE_ID search pattern (supports wildcards)
+        validation: "1-30 characters, uppercase"
+        example: "8113"
+      - name: limit
+        type: int
+        required: false
+        default: 1000
+        description: Maximum results to return
+        validation: "1-1000"
+    returns:
+      type: List[WorkOrder]
+      description: List of matching work orders, ordered by CREATE_DATE DESC
+      max_size: 1000
+    performance:
+      target: "<5 seconds"
+      typical: "1-2 seconds for 100 results"
+    errors:
+      - ValueError: "Invalid base_id_pattern (empty or too long)"
+      - DatabaseError: "Query failed or timeout"
+    example: |
+      results = service.search_work_orders("8113")
+      # Returns all work orders with BASE_ID starting with "8113"
+
+  - name: get_work_order_header
+    description: Get complete work order header with counts
+    parameters:
+      - name: base_id
+        type: str
+        required: true
+      - name: lot_id
+        type: str
+        required: true
+      - name: sub_id
+        type: str
+        required: true
+    returns:
+      type: WorkOrder
+      description: Complete work order header with aggregate counts
+    performance:
+      target: "<200ms"
+      typical: "50-100ms"
+    errors:
+      - ValueError: "Invalid composite key (empty field)"
+      - NotFoundError: "Work order not found"
+      - DatabaseError: "Query failed"
+    example: |
+      header = service.get_work_order_header("8113", "26", "")
+
+  # ========== Lazy Loading Methods (Level 2-4) ==========
+
+  - name: get_operations
+    description: Get all operations for a work order (lazy load)
+    parameters:
+      - name: base_id
+        type: str
+        required: true
+      - name: lot_id
+        type: str
+        required: true
+      - name: sub_id
+        type: str
+        required: true
+    returns:
+      type: List[Operation]
+      description: List of operations ordered by SEQUENCE
+      typical_size: "10-50 operations"
+    performance:
+      target: "<300ms"
+      typical: "100-200ms"
+    errors:
+      - ValueError: "Invalid composite key"
+      - DatabaseError: "Query failed"
+    example: |
+      operations = service.get_operations("8113", "26", "")
+
+  - name: get_requirements
+    description: Get material requirements for a specific operation (lazy load)
+    parameters:
+      - name: base_id
+        type: str
+        required: true
+      - name: lot_id
+        type: str
+        required: true
+      - name: sub_id
+        type: str
+        required: true
+      - name: operation_seq
+        type: int
+        required: true
+        description: Operation sequence number
+    returns:
+      type: List[Requirement]
+      description: List of parts required for operation
+      typical_size: "5-20 requirements"
+    performance:
+      target: "<200ms"
+      typical: "50-100ms"
+    errors:
+      - ValueError: "Invalid parameters"
+      - DatabaseError: "Query failed"
+    example: |
+      requirements = service.get_requirements("8113", "26", "", 10)
+
+  - name: get_part_details
+    description: Get detailed part information (optional - may use cached Part)
+    parameters:
+      - name: part_id
+        type: str
+        required: true
+    returns:
+      type: Part
+      description: Complete part master information
+    performance:
+      target: "<100ms"
+      typical: "30-50ms"
+    errors:
+      - ValueError: "Invalid part_id"
+      - NotFoundError: "Part not found"
+      - DatabaseError: "Query failed"
+    note: "May reuse PartService.get_part() from Inventory module"
+    example: |
+      part = service.get_part_details("M28803")
+
+  # ========== Transaction Methods (Lazy Load) ==========
+
+  - name: get_labor_tickets
+    description: Get all labor transactions for a work order (lazy load)
+    parameters:
+      - name: base_id
+        type: str
+        required: true
+      - name: lot_id
+        type: str
+        required: true
+      - name: sub_id
+        type: str
+        required: true
+    returns:
+      type: List[LaborTicket]
+      description: List of labor tickets ordered by LABOR_DATE DESC
+      typical_size: "50-200 tickets"
+    performance:
+      target: "<300ms"
+      typical: "100-200ms"
+    errors:
+      - ValueError: "Invalid composite key"
+      - DatabaseError: "Query failed"
+    example: |
+      labor = service.get_labor_tickets("8113", "26", "")
+
+  - name: get_inventory_transactions
+    description: Get all material transactions for a work order (lazy load)
+    parameters:
+      - name: base_id
+        type: str
+        required: true
+      - name: lot_id
+        type: str
+        required: true
+      - name: sub_id
+        type: str
+        required: true
+    returns:
+      type: List[InventoryTransaction]
+      description: List of material transactions ordered by TRANS_DATE DESC
+      typical_size: "20-100 transactions"
+    performance:
+      target: "<300ms"
+      typical: "100-200ms"
+    errors:
+      - ValueError: "Invalid composite key"
+      - DatabaseError: "Query failed"
+    example: |
+      transactions = service.get_inventory_transactions("8113", "26", "")
+
+  - name: get_wip_balance
+    description: Get WIP cost accumulation for a work order (lazy load)
+    parameters:
+      - name: base_id
+        type: str
+        required: true
+      - name: lot_id
+        type: str
+        required: true
+      - name: sub_id
+        type: str
+        required: true
+    returns:
+      type: Optional[WIPBalance]
+      description: WIP balance record (None if not found)
+    performance:
+      target: "<100ms"
+      typical: "30-50ms"
+    errors:
+      - ValueError: "Invalid composite key"
+      - DatabaseError: "Query failed"
+    example: |
+      wip = service.get_wip_balance("8113", "26", "")
+
+# ========== Implementation Notes ==========
+
+implementation:
+  database:
+    - All queries use WITH (NOLOCK) for read-only access
+    - Parameterized queries prevent SQL injection
+    - Timeout: 5 seconds per query
+    - Connection reuse: Use existing DatabaseConnection from application
+
+  error_handling:
+    - Database errors wrapped in user-friendly messages
+    - Empty results return empty list (not None)
+    - NotFoundError for missing work orders (header query)
+    - Logging: All errors logged with query parameters (no sensitive data)
+
+  validation:
+    - All string parameters: strip whitespace, convert to uppercase
+    - Composite keys: all three parts required (empty string '' allowed for SUB_ID)
+    - Numeric parameters: validate range and type
+
+  performance:
+    - Lazy loading crucial for large work orders
+    - No caching layer needed (historical data doesn't change)
+    - Aggregate counts preloaded for tree [+] indicators
+
+  testing:
+    - Unit tests: Mock database cursor, test model construction
+    - Integration tests: Real database queries with test work orders
+    - Performance tests: Measure query times with large datasets
+
+# ========== Usage Example ==========
+
+usage_example: |
+  # Initialize service
+  from visual_order_lookup.services.work_order_service import WorkOrderService
+  from visual_order_lookup.database.connection import DatabaseConnection
+
+  config = get_config()
+  db = DatabaseConnection(config.connection_string)
+  service = WorkOrderService(db)
+
+  # Search for work orders
+  results = service.search_work_orders("8113")
+  print(f"Found {len(results)} work orders")
+
+  # Load header
+  wo = results[0]
+  header = service.get_work_order_header(wo.base_id, wo.lot_id, wo.sub_id)
+
+  # Lazy load operations (when user expands tree)
+  operations = service.get_operations(wo.base_id, wo.lot_id, wo.sub_id)
+  for op in operations:
+      print(f"Operation {op.sequence}: {op.description}")
+
+      # Lazy load requirements (when user expands operation)
+      requirements = service.get_requirements(wo.base_id, wo.lot_id, wo.sub_id, op.sequence)
+      for req in requirements:
+          print(f"  - {req.part_id}: {req.qty_per}")
+
+  # Load transactions (when user expands nodes)
+  labor = service.get_labor_tickets(wo.base_id, wo.lot_id, wo.sub_id)
+  materials = service.get_inventory_transactions(wo.base_id, wo.lot_id, wo.sub_id)
+  wip = service.get_wip_balance(wo.base_id, wo.lot_id, wo.sub_id)

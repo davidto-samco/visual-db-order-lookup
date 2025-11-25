@@ -457,7 +457,7 @@ class OrderDetailView(QWidget):
                 <tr><td><b>Order Date:</b></td><td>{order.formatted_date()}</td></tr>
                 <tr><td><b>Customer:</b></td><td>{customer_name}</td></tr>
                 <tr><td><b>Contact:</b></td><td>{order.contact_name or '-'}</td></tr>
-                <tr><td><b>Customer PO:</b></td><td>{order.customer_po or '-'}</td></tr>
+                <tr><td><b>Customer PO:</b></td><td>{order.customer_po_ref or '-'}</td></tr>
                 <tr><td><b>Status:</b></td><td>{order.status or '-'}</td></tr>
             </table>
 

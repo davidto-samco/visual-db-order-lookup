@@ -10,6 +10,7 @@ from datetime import date
 
 from visual_order_lookup.database.connection import DatabaseConnection
 from visual_order_lookup.database.models import Part, WhereUsed, PurchaseHistory
+from visual_order_lookup.database import part_queries
 
 
 logger = logging.getLogger(__name__)
@@ -110,16 +111,17 @@ class PartService:
             raise
 
     def get_where_used(self, part_number: str) -> List[WhereUsed]:
-        """Retrieve all usage records for a specific part.
+        """Retrieve BOM where-used records for a specific part.
 
-        Shows where and when the part was used in customer orders and work orders.
+        Shows where the part is used in work orders/assemblies based on BOM structure.
+        Replaces previous inventory transaction history with REQUIREMENT table data.
 
         Args:
-            part_number: Part number to query usage history for
+            part_number: Part number to query BOM usage for
 
         Returns:
-            List of WhereUsed records ordered by transaction_date descending.
-            Empty list if no usage records found.
+            List of WhereUsed records ordered by work_order_master and seq_no.
+            Empty list if no BOM usage records found.
 
         Raises:
             Exception: If database error occurs
@@ -133,46 +135,18 @@ class PartService:
         if len(part_number) > 30:
             raise ValueError("Part number cannot exceed 30 characters")
 
-        logger.info(f"Fetching where-used for part: {part_number}")
-
-        # SQL query from contract
-        query = """
-            SELECT it.PART_ID, it.CUST_ORDER_ID, it.CUST_ORDER_LINE_NO,
-                   it.WORKORDER_BASE_ID + '/' + it.WORKORDER_LOT_ID AS work_order,
-                   it.TRANSACTION_DATE, it.QTY, it.WAREHOUSE_ID, it.LOCATION_ID,
-                   c.NAME AS customer_name
-            FROM INVENTORY_TRANS it WITH (NOLOCK)
-            LEFT JOIN CUSTOMER_ORDER co WITH (NOLOCK) ON it.CUST_ORDER_ID = co.ID
-            LEFT JOIN CUSTOMER c WITH (NOLOCK) ON co.CUSTOMER_ID = c.ID
-            WHERE it.PART_ID = ? AND it.TYPE = 'I'
-            ORDER BY it.TRANSACTION_DATE DESC
-        """
+        logger.info(f"Fetching BOM where-used for part: {part_number}")
 
         try:
-            with self.db_connection.get_cursor() as cursor:
-                cursor.execute(query, (part_number,))
-                rows = cursor.fetchall()
+            cursor = self.db_connection.get_cursor()
+            records = part_queries.get_part_bom_usage(cursor, part_number)
+            cursor.close()
 
-                usage_records = []
-                for row in rows:
-                    usage = WhereUsed(
-                        part_number=row.PART_ID,
-                        cust_order_id=row.CUST_ORDER_ID,
-                        cust_order_line_no=row.CUST_ORDER_LINE_NO,
-                        work_order=row.work_order if row.work_order != "/" else None,
-                        transaction_date=row.TRANSACTION_DATE,
-                        quantity=Decimal(row.QTY) if row.QTY else Decimal('0'),
-                        customer_name=row.customer_name,
-                        warehouse_id=row.WAREHOUSE_ID,
-                        location_id=row.LOCATION_ID,
-                    )
-                    usage_records.append(usage)
-
-                logger.info(f"Found {len(usage_records)} where-used records for part {part_number}")
-                return usage_records
+            logger.info(f"Found {len(records)} BOM where-used records for part {part_number}")
+            return records
 
         except Exception as e:
-            logger.error(f"Error fetching where-used for part {part_number}: {e}")
+            logger.error(f"Error fetching BOM where-used for part {part_number}: {e}")
             raise
 
     def get_purchase_history(self, part_number: str, limit: int = 100) -> List[PurchaseHistory]:
@@ -205,17 +179,21 @@ class PartService:
 
         logger.info(f"Fetching purchase history for part: {part_number} (limit: {limit})")
 
-        # SQL query from contract
+        # SQL query from contract with additional fields from purchase history enhancement
         query = f"""
             SELECT TOP ({limit})
                    pol.PART_ID, po.ID AS po_number, pol.LINE_NO,
                    po.ORDER_DATE, v.NAME AS vendor_name, v.ID AS vendor_id,
                    pol.VENDOR_PART_ID, pol.USER_ORDER_QTY AS quantity,
                    pol.UNIT_PRICE, pol.TOTAL_AMT_ORDERED AS line_total,
-                   pol.DESIRED_RECV_DATE, pol.LAST_RECEIVED_DATE
+                   pol.DESIRED_RECV_DATE, pol.LAST_RECEIVED_DATE,
+                   po.CURRENCY_ID AS currency,
+                   pol.TRADE_DISC_PERCENT AS disc_percent,
+                   p.WHSALE_UNIT_COST AS standard_unit_cost
             FROM PURC_ORDER_LINE pol WITH (NOLOCK)
             INNER JOIN PURCHASE_ORDER po WITH (NOLOCK) ON pol.PURC_ORDER_ID = po.ID
             INNER JOIN VENDOR v WITH (NOLOCK) ON po.VENDOR_ID = v.ID
+            LEFT JOIN PART p WITH (NOLOCK) ON pol.PART_ID = p.ID
             WHERE pol.PART_ID = ?
             ORDER BY po.ORDER_DATE DESC
         """
@@ -240,6 +218,13 @@ class PartService:
                         line_total=Decimal(row.line_total) if row.line_total else Decimal('0'),
                         desired_receive_date=row.DESIRED_RECV_DATE,
                         last_received_date=row.LAST_RECEIVED_DATE,
+                        # Enhanced fields from database
+                        currency=row.currency,
+                        native_currency=None,  # Not available in Visual database
+                        native_unit_price=None,  # Not available in Visual database
+                        disc_percent=Decimal(str(row.disc_percent)) if row.disc_percent is not None else None,
+                        fixed_disc=None,  # Not available in Visual database
+                        standard_unit_cost=Decimal(str(row.standard_unit_cost)) if row.standard_unit_cost is not None else None,
                     )
                     purchase_records.append(purchase)
 

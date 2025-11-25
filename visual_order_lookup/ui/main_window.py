@@ -18,7 +18,7 @@ from visual_order_lookup.services.order_service import OrderService, DatabaseWor
 from visual_order_lookup.ui.navigation_panel import NavigationPanel
 from visual_order_lookup.ui.sales_module import SalesModuleWidget
 from visual_order_lookup.ui.inventory_module import InventoryModuleWidget
-from visual_order_lookup.ui.engineering_module import EngineeringModuleWidget
+from visual_order_lookup.ui.engineering import EngineeringModule
 from visual_order_lookup.ui.dialogs import LoadingDialog, ErrorHandler
 from visual_order_lookup.utils.config import get_config
 from visual_order_lookup.database.models import DateRangeFilter
@@ -96,8 +96,8 @@ class MainWindow(QMainWindow):
         self.inventory_module = InventoryModuleWidget(self.db_connection)
         self.module_stack.addWidget(self.inventory_module)  # Index 1
 
-        # Create Engineering module widget (full functionality)
-        self.engineering_module = EngineeringModuleWidget(self.db_connection)
+        # T080-T083: Create Engineering module widget (Work Order hierarchy viewer)
+        self.engineering_module = EngineeringModule(self.db_connection)
         self.module_stack.addWidget(self.engineering_module)  # Index 2
 
         main_layout.addWidget(self.module_stack)
@@ -116,14 +116,17 @@ class MainWindow(QMainWindow):
         # Navigation panel -> module stack switching
         self.navigation_panel.currentRowChanged.connect(self.module_stack.setCurrentIndex)
 
+        # T084: Update window title when module changes
+        self.navigation_panel.currentRowChanged.connect(self._on_module_changed)
+
         # Sales module signals
         self.sales_module.order_selected.connect(self.on_order_selected)
         self.sales_module.date_filter_requested.connect(self.on_date_filter)
         self.sales_module.clear_filters_requested.connect(self.on_clear_filters)
         self.sales_module.search_requested.connect(self.on_search)
+        self.sales_module.search_cleared.connect(self.on_search_cleared)
 
-        # Cross-module navigation
-        self.engineering_module.switch_to_inventory.connect(self.on_switch_to_inventory)
+        # Cross-module navigation (currently no signals from Engineering module)
 
     def _setup_shortcuts(self):
         """Set up keyboard shortcuts for module switching."""
@@ -138,6 +141,23 @@ class MainWindow(QMainWindow):
         # Ctrl+3: Switch to Engineering
         shortcut_engineering = QShortcut(QKeySequence("Ctrl+3"), self)
         shortcut_engineering.activated.connect(lambda: self.navigation_panel.set_module_index(2))
+
+    def _on_module_changed(self, index: int):
+        """Handle module change to update window title.
+
+        T084: Update window title for Engineering module
+        """
+        module_names = {
+            0: "Sales",
+            1: "Inventory",
+            2: "Engineering - Work Order Lookup - Read Only"
+        }
+
+        base_title = self.config.app_name
+        if index in module_names:
+            self.setWindowTitle(f"{base_title} - {module_names[index]}")
+        else:
+            self.setWindowTitle(base_title)
 
     def cleanup_worker_thread(self):
         """Called when thread finishes to clean up references."""
@@ -302,6 +322,47 @@ class MainWindow(QMainWindow):
             self.worker_thread.finished.connect(self.cleanup_worker_thread)
 
             self.worker_thread.start()
+
+    def on_search_cleared(self):
+        """Handle search input being cleared.
+
+        When user clears the search input (e.g., customer name), revert to date filter
+        results if a date filter is active, otherwise load recent orders.
+        """
+        logger.info("Search input cleared")
+
+        # Clear customer search state
+        self.current_customer_search = None
+
+        # If there's an active date filter, reapply it
+        if self.current_date_filter:
+            logger.info("Reapplying date filter after search cleared")
+            self.status_label.setText("Applying date filter...")
+
+            self.loading_dialog = LoadingDialog("Filtering orders...", self)
+            self.loading_dialog.show()
+
+            self.worker_thread = QThread()
+            self.worker = DatabaseWorker(
+                self.order_service,
+                "filter_by_date_range",
+                date_filter=self.current_date_filter
+            )
+
+            self.worker.moveToThread(self.worker_thread)
+            self.worker_thread.started.connect(self.worker.run)
+            self.worker.finished.connect(self.on_orders_loaded)
+            self.worker.error.connect(self.on_load_error)
+            self.worker.finished.connect(self.worker_thread.quit)
+            self.worker.error.connect(self.worker_thread.quit)
+            self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+            self.worker_thread.finished.connect(self.cleanup_worker_thread)
+
+            self.worker_thread.start()
+        else:
+            # No date filter active, load recent orders
+            logger.info("No date filter active, loading recent orders")
+            self.load_recent_orders()
 
     def on_job_number_search_result(self, order):
         """Handle job number search result."""

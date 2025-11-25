@@ -114,17 +114,36 @@ class WorkOrder:
     def formatted_dates(self) -> str:
         """Format dates for display in column 2.
 
-        Format: (SCHED_START_DATE) - (SCHED_FINISH_DATE)
-        Example: (10/31/2011) - (10/16/2011)
-        If no data: 0 - 0
+        Format: -77.33, 8/15/2011(10/31/2011) - 1/13/2011(10/16/2011)
+        Which is: [days_diff], DESIRED_WANT_DATE(SCHED_FINISH_DATE) - DESIRED_RLS_DATE(SCHED_START_DATE)
+
+        Where:
+        - days_diff = DESIRED_WANT_DATE - SCHED_FINISH_DATE (negative if behind schedule)
+        - DESIRED_WANT_DATE = When customer wants it
+        - SCHED_FINISH_DATE = When it's scheduled to finish
+        - DESIRED_RLS_DATE = Desired release/start date
+        - SCHED_START_DATE = Actual scheduled start
 
         Returns:
-            Formatted date range string
+            Formatted date string with all 4 dates
         """
-        start_str = self.start_date.strftime('(%m/%d/%Y)') if self.start_date else '0'
-        finish_str = self.sched_finish_date.strftime('(%m/%d/%Y)') if self.sched_finish_date else '0'
+        # Calculate days difference
+        days_diff = ""
+        if self.desired_want_date and self.sched_finish_date:
+            diff_days = (self.desired_want_date - self.sched_finish_date).days
+            days_diff = f"{diff_days}, "
 
-        return f"{start_str} - {finish_str}"
+        # Format the 4 dates
+        want_date = self.desired_want_date.strftime('%m/%d/%Y') if self.desired_want_date else ''
+        finish_date = self.sched_finish_date.strftime('%m/%d/%Y') if self.sched_finish_date else ''
+        rls_date = self.desired_rls_date.strftime('%m/%d/%Y') if self.desired_rls_date else ''
+        start_date = self.start_date.strftime('%m/%d/%Y') if self.start_date else ''
+
+        # Build the formatted string
+        left_part = f"{want_date}({finish_date})" if want_date or finish_date else "0"
+        right_part = f"{rls_date}({start_date})" if rls_date or start_date else "0"
+
+        return f"{days_diff}{left_part} - {right_part}"
 
 
 @dataclass
@@ -182,6 +201,22 @@ class Operation:
             Setup and run hours formatted
         """
         return f"Setup: {self.setup_hrs:.2f} Hrs, Run: {self.run_hrs:.2f} Hrs/unit"
+
+    def formatted_details(self) -> str:
+        """Format detailed status and hours for display in column 3.
+
+        Detailed view format matching manufacturing-expand.png:
+        - Shows status and hours information
+        - Example: "S/O 0.00 Hrs, 0.00 HRS/PC, Qty 1.0000"
+
+        Returns:
+            Formatted details string with status and hours
+        """
+        status = self.status or 'N/A'
+        setup = self.setup_hrs if self.setup_hrs else Decimal('0')
+        run = self.run_hrs if self.run_hrs else Decimal('0')
+
+        return f"{status} {setup:.2f} Hrs, {run:.2f} HRS/PC"
 
     def formatted_display(self) -> str:
         """Full display format for tree node.
@@ -313,6 +348,32 @@ class Requirement:
         finish_str = self.subord_wo_finish_date.strftime('(%m/%d/%Y)') if self.subord_wo_finish_date else '0'
 
         return f"{start_str} - {finish_str}"
+
+    def formatted_details(self) -> str:
+        """Format detailed quantity information for display in column 3.
+
+        Detailed view format matching manufacturing-expand.png:
+        - Shows quantity and scrap percentage
+        - Example: "Qty 1.0000" or "Qty 1.0000 + 5.00% scrap"
+
+        Returns:
+            Formatted details string with quantity and optional scrap
+        """
+        if self.has_child_work_order():
+            # For sub-work-orders, show sub-WO status and quantity
+            status = self.subord_wo_status or 'N/A'
+            qty = self.subord_wo_qty if self.subord_wo_qty else Decimal('0')
+            return f"{status} Qty {qty:.4f}"
+        else:
+            # For regular requirements, show qty_per and scrap
+            qty = self.qty_per if self.qty_per else Decimal('0')
+            scrap = self.scrap_percent if self.scrap_percent else Decimal('0')
+
+            # Show scrap if non-zero
+            if scrap > 0:
+                return f"Qty {qty:.4f} + {scrap:.2f}% scrap"
+            else:
+                return f"Qty {qty:.4f}"
 
 
 @dataclass

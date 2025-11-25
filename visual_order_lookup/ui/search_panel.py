@@ -166,6 +166,7 @@ class CombinedFilterSearchToolbar(QWidget):
     filter_clicked = pyqtSignal(DateRangeFilter)  # Emits date filter
     clear_clicked = pyqtSignal()  # Emits when clear button clicked
     search_clicked = pyqtSignal(str, str)  # Emits (search_type, search_value)
+    search_cleared = pyqtSignal()  # Emits when search input is cleared
 
     def __init__(self, parent=None):
         """Initialize combined filter and search toolbar."""
@@ -225,6 +226,7 @@ class CombinedFilterSearchToolbar(QWidget):
         self.search_input.setPlaceholderText("Enter job number...")
         self.search_input.setMinimumWidth(200)
         self.search_input.returnPressed.connect(self.on_search_clicked)
+        self.search_input.textChanged.connect(self.on_search_text_changed)
         layout.addWidget(self.search_input, 1)  # Stretch factor 1
 
         self.search_button = QPushButton("Search")
@@ -232,6 +234,9 @@ class CombinedFilterSearchToolbar(QWidget):
         layout.addWidget(self.search_button)
 
         layout.addStretch()
+
+        # Track last search value to detect clearing
+        self._last_search_value = ""
 
     def on_filter_clicked(self):
         """Handle filter button click."""
@@ -277,8 +282,26 @@ class CombinedFilterSearchToolbar(QWidget):
             return
 
         search_type = self.search_type_combo.currentText()
+        self._last_search_value = search_value
         self.search_clicked.emit(search_type, search_value)
+
+    def on_search_text_changed(self, text: str):
+        """Handle search input text change.
+
+        Emits search_cleared signal when search input becomes empty after having a value.
+        This allows the UI to revert to date filter results when user clears the search.
+
+        Args:
+            text: Current text in search input
+        """
+        current_value = text.strip()
+
+        # If search was previously populated and is now empty, emit cleared signal
+        if self._last_search_value and not current_value:
+            self._last_search_value = ""
+            self.search_cleared.emit()
 
     def clear_search(self):
         """Clear search input."""
+        self._last_search_value = ""
         self.search_input.clear()

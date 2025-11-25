@@ -11,7 +11,7 @@ import logging
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QSplitter,
-    QMessageBox, QToolBar, QHeaderView
+    QMessageBox, QToolBar, QHeaderView, QStackedWidget
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QAction
@@ -118,11 +118,36 @@ class EngineeringModule(QWidget):
         self.export_csv_action.triggered.connect(self._on_export_csv)
         toolbar.addAction(self.export_csv_action)
 
+        toolbar.addSeparator()
+
+        # TODO: Temporarily disabled - detailed view not working correctly
+        # self.toggle_view_action = QAction("Detailed View", self)
+        # self.toggle_view_action.setCheckable(True)
+        # self.toggle_view_action.setChecked(False)  # Start in simplified view
+        # self.toggle_view_action.triggered.connect(self._on_toggle_view)
+        # toolbar.addAction(self.toggle_view_action)
+
         tree_layout.addWidget(toolbar)
 
-        # Work order tree widget (T045)
-        self.tree_widget = WorkOrderTreeWidget(self.service)
-        tree_layout.addWidget(self.tree_widget)
+        # Stacked widget to hold both tree views (T045)
+        # This allows us to keep both trees in memory and swap between them
+        # without losing expansion state, scroll position, etc.
+        self.tree_stack = QStackedWidget()
+
+        # Simplified view tree (index 0)
+        self.simplified_tree = WorkOrderTreeWidget(self.service)
+        self.simplified_tree.set_detailed_view(False)
+        self.tree_stack.addWidget(self.simplified_tree)
+
+        # Detailed view tree (index 1)
+        self.detailed_tree = WorkOrderTreeWidget(self.service)
+        self.detailed_tree.set_detailed_view(True)
+        self.tree_stack.addWidget(self.detailed_tree)
+
+        # Start with simplified view visible
+        self.tree_stack.setCurrentIndex(0)
+
+        tree_layout.addWidget(self.tree_stack)
 
         splitter.addWidget(tree_container)
 
@@ -133,6 +158,15 @@ class EngineeringModule(QWidget):
         layout.addWidget(splitter)
 
         logger.debug("Engineering module UI setup complete")
+
+    @property
+    def current_tree(self) -> WorkOrderTreeWidget:
+        """Get the currently active tree widget based on view mode.
+
+        Returns:
+            The active tree widget (simplified or detailed)
+        """
+        return self.tree_stack.currentWidget()
 
     def _connect_signals(self):
         """Connect widget signals."""
@@ -274,8 +308,10 @@ class EngineeringModule(QWidget):
                     work_order.sub_id
                 )
 
-                # Load into tree widget (T047)
-                self.tree_widget.load_work_order(full_wo)
+                # Load into BOTH tree widgets (T047)
+                # This allows seamless toggling between views without reloading
+                self.simplified_tree.load_work_order(full_wo)
+                self.detailed_tree.load_work_order(full_wo)
 
             except WorkOrderServiceError as e:
                 logger.error(f"Error loading work order: {e}")
@@ -298,7 +334,7 @@ class EngineeringModule(QWidget):
         self.expand_all_action.setText("Expanding...")
 
         try:
-            self.tree_widget.expand_all()
+            self.current_tree.expand_all()
         finally:
             self.expand_all_action.setEnabled(True)
             self.expand_all_action.setText("Expand All")
@@ -309,7 +345,7 @@ class EngineeringModule(QWidget):
         T070: Implement collapse_all()
         """
         logger.debug("Collapsing all tree nodes")
-        self.tree_widget.collapse_all()
+        self.current_tree.collapse_all()
 
     def _on_export_csv(self):
         """Handle Export to CSV button click.
@@ -319,7 +355,7 @@ class EngineeringModule(QWidget):
         logger.debug("Exporting tree to CSV")
 
         try:
-            self.tree_widget.export_to_csv()
+            self.current_tree.export_to_csv()
         except Exception as e:
             logger.error(f"CSV export error: {e}")
             QMessageBox.critical(
@@ -327,3 +363,30 @@ class EngineeringModule(QWidget):
                 "Export Error",
                 f"Failed to export to CSV:\n{str(e)}"
             )
+
+    def _on_toggle_view(self, checked: bool):
+        """Handle view toggle button click.
+
+        Args:
+            checked: True for detailed view, False for simplified view
+        """
+        view_mode = "DETAILED" if checked else "SIMPLIFIED"
+        logger.info(f"")
+        logger.info(f"{'='*60}")
+        logger.info(f"🔄 TOGGLING TO {view_mode} VIEW")
+        logger.info(f"{'='*60}")
+        logger.info(f"")
+
+        # Update button text
+        if checked:
+            self.toggle_view_action.setText("Simplified View")
+        else:
+            self.toggle_view_action.setText("Detailed View")
+
+        # Simply swap the visible tree widget (preserves expansion state)
+        if checked:
+            self.tree_stack.setCurrentIndex(1)  # Detailed view
+            logger.info("Switched to detailed view tree (expansion state preserved)")
+        else:
+            self.tree_stack.setCurrentIndex(0)  # Simplified view
+            logger.info("Switched to simplified view tree (expansion state preserved)")

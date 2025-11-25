@@ -50,10 +50,12 @@ class BOMService:
 
         try:
             logger.debug(f"Querying job info for {job_number}")
-            result = self.db_connection.execute_query(query, (job_number,), timeout=30)
+            cursor = self.db_connection.get_cursor()
+            cursor.execute(query, (job_number,))
+            row = cursor.fetchone()
+            cursor.close()
 
-            if result and len(result) > 0:
-                row = result[0]
+            if row:
                 job = Job(
                     job_number=row[0],
                     customer_id=row[1],
@@ -100,7 +102,10 @@ class BOMService:
 
         try:
             logger.info(f"Loading assemblies for job {job_number}")
-            results = self.db_connection.execute_query(query, (job_number,), timeout=30)
+            cursor = self.db_connection.get_cursor()
+            cursor.execute(query, (job_number,))
+            results = cursor.fetchall()
+            cursor.close()
 
             nodes = []
             for row in results:
@@ -134,7 +139,7 @@ class BOMService:
             raise
 
     def get_assembly_parts(self, job_number: str, lot_id: str) -> List[BOMNode]:
-        """Get parts for a specific assembly (BASE_LOT_ID = lot_id).
+        """Get parts for a specific assembly (LOT_ID = lot_id).
 
         Args:
             job_number: Job number
@@ -148,7 +153,7 @@ class BOMService:
                 wo.BASE_ID AS job_number,
                 wo.LOT_ID,
                 wo.SUB_ID,
-                wo.BASE_LOT_ID,
+                wo.LOT_ID AS base_lot_id,
                 wo.PART_ID,
                 p.DESCRIPTION AS part_description,
                 p.FABRICATED AS is_fabricated,
@@ -158,21 +163,26 @@ class BOMService:
                     WHEN EXISTS (
                         SELECT 1 FROM WORK_ORDER wo2 WITH (NOLOCK)
                         WHERE wo2.BASE_ID = wo.BASE_ID
-                        AND wo2.BASE_LOT_ID = wo.LOT_ID
+                        AND wo2.LOT_ID <> '00'
+                        AND wo2.PART_ID = wo.PART_ID
                     ) THEN 1
                     ELSE 0
                 END AS has_children
             FROM WORK_ORDER wo WITH (NOLOCK)
             LEFT JOIN PART p WITH (NOLOCK) ON wo.PART_ID = p.ID
-            WHERE wo.BASE_ID = ? AND wo.BASE_LOT_ID = ?
-            ORDER BY wo.SUB_ID
+            WHERE wo.BASE_ID = ?
+              AND wo.LOT_ID = ?
+              AND wo.SUB_ID <> '0'
+              AND wo.PART_ID IS NOT NULL
+            ORDER BY CAST(wo.SUB_ID AS INT)
         """
 
         try:
             logger.debug(f"Loading parts for assembly {job_number}/{lot_id}")
-            results = self.db_connection.execute_query(
-                query, (job_number, lot_id), timeout=30
-            )
+            cursor = self.db_connection.get_cursor()
+            cursor.execute(query, (job_number, lot_id))
+            results = cursor.fetchall()
+            cursor.close()
 
             nodes = []
             for row in results:

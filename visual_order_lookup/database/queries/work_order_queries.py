@@ -333,7 +333,15 @@ def get_requirements(cursor: pyodbc.Cursor, base_id: str, lot_id: str, sub_id: s
     rows = cursor.fetchall()
 
     requirements = []
+    logger.info(f"")
+    logger.info(f"DATABASE QUERY RESULTS for operation {operation_seq}:")
+    logger.info(f"  Found {len(rows)} rows from database")
+
     for row in rows:
+        part_display = row.PART_ID.strip() if row.PART_ID else 'NO_PART_ID'
+        has_sub_wo = 'YES' if row.SUBORD_WO_SUB_ID else 'NO'
+        logger.info(f"  - Part: {part_display}, Has SubWO: {has_sub_wo}, SubWO_SUB_ID: {row.SUBORD_WO_SUB_ID}")
+
         req = Requirement(
             workorder_base_id=base_id,
             workorder_lot_id=lot_id,
@@ -357,6 +365,7 @@ def get_requirements(cursor: pyodbc.Cursor, base_id: str, lot_id: str, sub_id: s
         requirements.append(req)
 
     logger.info(f"Loaded {len(requirements)} requirements")
+    logger.info(f"")
     return requirements
 
 

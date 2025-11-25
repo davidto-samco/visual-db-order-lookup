@@ -27,6 +27,7 @@ class SalesModuleWidget(QWidget):
     date_filter_requested = pyqtSignal(DateRangeFilter)
     clear_filters_requested = pyqtSignal()
     search_requested = pyqtSignal(str, str)  # search_type, search_value
+    search_cleared = pyqtSignal()  # Emitted when search input is cleared
 
     def __init__(self, parent=None):
         """Initialize sales module with UI components.
@@ -74,3 +75,4 @@ class SalesModuleWidget(QWidget):
         self.toolbar.filter_clicked.connect(self.date_filter_requested.emit)
         self.toolbar.clear_clicked.connect(self.clear_filters_requested.emit)
         self.toolbar.search_clicked.connect(self.search_requested.emit)
+        self.toolbar.search_cleared.connect(self.search_cleared.emit)
