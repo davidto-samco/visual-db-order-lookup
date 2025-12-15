@@ -1,0 +1,1107 @@
+openapi: 3.0.3
+info:
+  title: Visual Order Lookup API
+  description: |
+    REST API for the Visual Order Lookup application.
+    Provides access to customer orders, parts inventory, and manufacturing work orders
+    from the SAMCO SQL Server database.
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:3000/api
+    description: Development server
+  - url: http://visual-orders.internal/api
+    description: Production server
+
+tags:
+  - name: Orders
+    description: Customer order operations
+  - name: Parts
+    description: Part/inventory operations
+  - name: Work Orders
+    description: Manufacturing work order operations
+  - name: BOM
+    description: Bill of Materials operations
+  - name: Reports
+    description: Report generation
+
+paths:
+  # ============================================
+  # ORDERS
+  # ============================================
+  /orders:
+    get:
+      tags:
+        - Orders
+      summary: List orders
+      description: |
+        Retrieve a list of customer orders. Supports filtering by date range
+        and customer name search.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of orders to return
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+        - name: startDate
+          in: query
+          description: Filter orders on or after this date (ISO 8601)
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: Filter orders on or before this date (ISO 8601)
+          schema:
+            type: string
+            format: date
+        - name: customer
+          in: query
+          description: Filter by customer name (partial match, case-insensitive)
+          schema:
+            type: string
+            minLength: 2
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OrderSummary'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /orders/{jobNumber}:
+    get:
+      tags:
+        - Orders
+      summary: Get order details
+      description: Retrieve full details for a specific customer order
+      parameters:
+        - name: jobNumber
+          in: path
+          required: true
+          description: The job/order number
+          schema:
+            type: string
+            maxLength: 30
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OrderHeader'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /orders/{jobNumber}/report:
+    get:
+      tags:
+        - Orders
+        - Reports
+      summary: Generate order report
+      description: Generate an order acknowledgement report in HTML or PDF format
+      parameters:
+        - name: jobNumber
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          description: Output format
+          schema:
+            type: string
+            enum: [html, pdf]
+            default: html
+      responses:
+        '200':
+          description: Report generated successfully
+          content:
+            text/html:
+              schema:
+                type: string
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================
+  # PARTS
+  # ============================================
+  /parts/{partId}:
+    get:
+      tags:
+        - Parts
+      summary: Get part details
+      description: Retrieve master data for a specific part
+      parameters:
+        - name: partId
+          in: path
+          required: true
+          description: The part number
+          schema:
+            type: string
+            maxLength: 30
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Part'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /parts/{partId}/where-used:
+    get:
+      tags:
+        - Parts
+      summary: Get part BOM usage
+      description: Find all work orders/BOMs where this part is used as a component
+      parameters:
+        - name: partId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WhereUsed'
+
+  /parts/{partId}/purchase-history:
+    get:
+      tags:
+        - Parts
+      summary: Get purchase history
+      description: Retrieve purchase order history for a specific part
+      parameters:
+        - name: partId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PurchaseHistory'
+
+  # ============================================
+  # WORK ORDERS
+  # ============================================
+  /work-orders:
+    get:
+      tags:
+        - Work Orders
+      summary: Search work orders
+      description: Search for work orders by BASE_ID pattern
+      parameters:
+        - name: baseId
+          in: query
+          required: true
+          description: BASE_ID pattern to search (partial match)
+          schema:
+            type: string
+            minLength: 2
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkOrderSummary'
+
+  /work-orders/{baseId}/{lotId}/{subId}:
+    get:
+      tags:
+        - Work Orders
+      summary: Get work order header
+      description: Retrieve work order header with aggregate counts
+      parameters:
+        - name: baseId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lotId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: subId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WorkOrderHeader'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /work-orders/{baseId}/{lotId}/{subId}/operations:
+    get:
+      tags:
+        - Work Orders
+      summary: Get work order operations
+      description: Retrieve manufacturing operations for a work order
+      parameters:
+        - name: baseId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lotId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: subId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Operation'
+
+  /work-orders/{baseId}/{lotId}/{subId}/operations/{seqNo}/requirements:
+    get:
+      tags:
+        - Work Orders
+      summary: Get operation requirements
+      description: Retrieve material requirements for a specific operation
+      parameters:
+        - name: baseId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lotId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: subId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: seqNo
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Requirement'
+
+  /work-orders/{baseId}/{lotId}/{subId}/labor:
+    get:
+      tags:
+        - Work Orders
+      summary: Get labor tickets
+      description: Retrieve labor ticket transactions for a work order
+      parameters:
+        - name: baseId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lotId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: subId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LaborTicket'
+
+  /work-orders/{baseId}/{lotId}/{subId}/transactions:
+    get:
+      tags:
+        - Work Orders
+      summary: Get inventory transactions
+      description: Retrieve material transactions (issue, return, scrap) for a work order
+      parameters:
+        - name: baseId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lotId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: subId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InventoryTransaction'
+
+  /work-orders/{baseId}/{lotId}/{subId}/wip:
+    get:
+      tags:
+        - Work Orders
+      summary: Get WIP balance
+      description: Retrieve work-in-progress cost accumulation for a work order
+      parameters:
+        - name: baseId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lotId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: subId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WIPBalance'
+
+  # ============================================
+  # BOM
+  # ============================================
+  /bom/{jobNumber}:
+    get:
+      tags:
+        - BOM
+      summary: Get job BOM info
+      description: Retrieve job header with assembly count for BOM display
+      parameters:
+        - name: jobNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/JobBOMInfo'
+
+  /bom/{jobNumber}/assemblies:
+    get:
+      tags:
+        - BOM
+      summary: Get top-level assemblies
+      description: Retrieve top-level assemblies (LOT_ID='00') for a job
+      parameters:
+        - name: jobNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BOMNode'
+
+  /bom/{baseId}/{lotId}/{subId}/children:
+    get:
+      tags:
+        - BOM
+      summary: Get BOM children
+      description: Retrieve child requirements for a work order (lazy loading)
+      parameters:
+        - name: baseId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lotId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: subId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BOMNode'
+
+  # ============================================
+  # HEALTH
+  # ============================================
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check API and database connectivity
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  database:
+                    type: string
+                    example: connected
+                  timestamp:
+                    type: string
+                    format: date-time
+        '503':
+          description: Service unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: error
+                  database:
+                    type: string
+                    example: disconnected
+
+components:
+  schemas:
+    # ============================================
+    # ORDER SCHEMAS
+    # ============================================
+    OrderSummary:
+      type: object
+      properties:
+        jobNumber:
+          type: string
+          description: Order/job number (CUSTOMER_ORDER.ID)
+        customerName:
+          type: string
+          description: Customer name
+        poNumber:
+          type: string
+          nullable: true
+          description: Customer PO reference
+        orderDate:
+          type: string
+          format: date
+          nullable: true
+        totalAmount:
+          type: number
+          format: decimal
+          nullable: true
+      required:
+        - jobNumber
+        - customerName
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        shipToAddress:
+          $ref: '#/components/schemas/Address'
+        billToAddress:
+          $ref: '#/components/schemas/Address'
+
+    Address:
+      type: object
+      properties:
+        line1:
+          type: string
+          nullable: true
+        line2:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zipCode:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+
+    OrderLineItem:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+        partId:
+          type: string
+        description:
+          type: string
+          nullable: true
+        orderQty:
+          type: number
+        unitPrice:
+          type: number
+        extendedPrice:
+          type: number
+        baseId:
+          type: string
+          nullable: true
+        lotId:
+          type: string
+          nullable: true
+        binaryDescription:
+          type: string
+          nullable: true
+          description: Extended description from CUST_LINE_BINARY
+
+    OrderHeader:
+      type: object
+      properties:
+        id:
+          type: string
+        jobNumber:
+          type: string
+        orderDate:
+          type: string
+          format: date
+          nullable: true
+        desiredShipDate:
+          type: string
+          format: date
+          nullable: true
+        customer:
+          $ref: '#/components/schemas/Customer'
+        poNumber:
+          type: string
+          nullable: true
+        contactName:
+          type: string
+          nullable: true
+        contactPhone:
+          type: string
+          nullable: true
+        contactEmail:
+          type: string
+          nullable: true
+        lineItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLineItem'
+        totalAmount:
+          type: number
+        paymentTerms:
+          type: string
+          nullable: true
+        projectDescription:
+          type: string
+          nullable: true
+          description: From CUST_ORDER_BINARY
+
+    # ============================================
+    # PART SCHEMAS
+    # ============================================
+    Part:
+      type: object
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+          nullable: true
+        stockUm:
+          type: string
+          nullable: true
+          description: Stock unit of measure
+        productCode:
+          type: string
+          nullable: true
+        commodityCode:
+          type: string
+          nullable: true
+        standardCost:
+          type: number
+        averageCost:
+          type: number
+        lastCost:
+          type: number
+        listPrice:
+          type: number
+        qtyOnHand:
+          type: number
+        qtyOnOrder:
+          type: number
+        qtyAllocated:
+          type: number
+        vendorId:
+          type: string
+          nullable: true
+        vendorName:
+          type: string
+          nullable: true
+        makeBuyCode:
+          type: string
+          nullable: true
+          description: M=Manufactured, B=Purchased
+        abc:
+          type: string
+          nullable: true
+          description: ABC classification
+        phantomFlag:
+          type: boolean
+        isActive:
+          type: boolean
+
+    WhereUsed:
+      type: object
+      properties:
+        baseId:
+          type: string
+        lotId:
+          type: string
+        subId:
+          type: string
+        partId:
+          type: string
+          description: Parent assembly part
+        qtyPer:
+          type: number
+        fixedQty:
+          type: number
+        scrapPercent:
+          type: number
+        status:
+          type: string
+          nullable: true
+
+    PurchaseHistory:
+      type: object
+      properties:
+        poNumber:
+          type: string
+        lineNo:
+          type: integer
+        vendorId:
+          type: string
+        vendorName:
+          type: string
+          nullable: true
+        orderDate:
+          type: string
+          format: date
+          nullable: true
+        orderQty:
+          type: number
+        receivedQty:
+          type: number
+        unitPrice:
+          type: number
+        currencyId:
+          type: string
+          nullable: true
+
+    # ============================================
+    # WORK ORDER SCHEMAS
+    # ============================================
+    WorkOrderSummary:
+      type: object
+      properties:
+        baseId:
+          type: string
+        lotId:
+          type: string
+        subId:
+          type: string
+        partId:
+          type: string
+        partDescription:
+          type: string
+          nullable: true
+        desiredQty:
+          type: number
+        status:
+          type: string
+          nullable: true
+        orderDate:
+          type: string
+          format: date
+          nullable: true
+
+    WorkOrderHeader:
+      type: object
+      properties:
+        baseId:
+          type: string
+        lotId:
+          type: string
+        subId:
+          type: string
+        partId:
+          type: string
+        partDescription:
+          type: string
+          nullable: true
+        desiredQty:
+          type: number
+        completedQty:
+          type: number
+        status:
+          type: string
+          nullable: true
+        orderDate:
+          type: string
+          format: date
+          nullable: true
+        desiredDate:
+          type: string
+          format: date
+          nullable: true
+        completedDate:
+          type: string
+          format: date
+          nullable: true
+        operationCount:
+          type: integer
+          description: Number of operations
+        requirementCount:
+          type: integer
+          description: Number of material requirements
+        laborCount:
+          type: integer
+          description: Number of labor tickets
+        transactionCount:
+          type: integer
+          description: Number of inventory transactions
+
+    Operation:
+      type: object
+      properties:
+        sequenceNo:
+          type: integer
+        operationId:
+          type: string
+        description:
+          type: string
+          nullable: true
+        department:
+          type: string
+          nullable: true
+        workCenter:
+          type: string
+          nullable: true
+        setupHrs:
+          type: number
+        runHrsPer:
+          type: number
+        status:
+          type: string
+          nullable: true
+
+    Requirement:
+      type: object
+      properties:
+        partId:
+          type: string
+        description:
+          type: string
+          nullable: true
+        qtyPer:
+          type: number
+        fixedQty:
+          type: number
+        scrapPercent:
+          type: number
+        subordWoSubId:
+          type: string
+          nullable: true
+          description: Child work order SUB_ID if this is a sub-assembly
+        hasChildWorkOrder:
+          type: boolean
+
+    LaborTicket:
+      type: object
+      properties:
+        employeeId:
+          type: string
+        laborDate:
+          type: string
+          format: date
+        setupHrs:
+          type: number
+        runHrs:
+          type: number
+        operationSeqNo:
+          type: integer
+
+    InventoryTransaction:
+      type: object
+      properties:
+        partId:
+          type: string
+        transType:
+          type: string
+          description: Issue, Return, Scrap, etc.
+        quantity:
+          type: number
+        transDate:
+          type: string
+          format: date
+        lotId:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+
+    WIPBalance:
+      type: object
+      properties:
+        materialCost:
+          type: number
+        laborCost:
+          type: number
+        burdenCost:
+          type: number
+        totalCost:
+          type: number
+
+    # ============================================
+    # BOM SCHEMAS
+    # ============================================
+    JobBOMInfo:
+      type: object
+      properties:
+        jobNumber:
+          type: string
+        customerName:
+          type: string
+        orderDate:
+          type: string
+          format: date
+          nullable: true
+        assemblyCount:
+          type: integer
+
+    BOMNode:
+      type: object
+      properties:
+        baseId:
+          type: string
+        lotId:
+          type: string
+        subId:
+          type: string
+        partId:
+          type: string
+        description:
+          type: string
+          nullable: true
+        qtyPer:
+          type: number
+          nullable: true
+        makeBuyCode:
+          type: string
+          nullable: true
+        hasChildren:
+          type: boolean
+          description: True if this node has child requirements
+        nodeType:
+          type: string
+          enum: [assembly, manufactured, purchased]
+
+    # ============================================
+    # COMMON SCHEMAS
+    # ============================================
+    PaginationMeta:
+      type: object
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Invalid date format
+            code: VALIDATION_ERROR
+            details:
+              field: startDate
+              expected: ISO 8601 date
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Order not found
+            code: NOT_FOUND
+            details:
+              jobNumber: "12345"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Database connection failed
+            code: INTERNAL_ERROR
