@@ -8,273 +8,266 @@ The service layer contains the business logic and orchestrates database queries.
 
 ```
 src/services/
-├── index.ts              # Export all services
-├── order.service.ts      # Sales module business logic
-├── part.service.ts       # Inventory module business logic
-├── workorder.service.ts  # Engineering module business logic
-└── bom.service.ts        # BOM hierarchy operations
+├── index.js              # Export all services
+├── order.service.js      # Sales module business logic
+├── part.service.js       # Inventory module business logic
+├── workorder.service.js  # Engineering module business logic
+└── bom.service.js        # BOM hierarchy operations
 ```
 
 ---
 
-## Order Service (src/services/order.service.ts)
+## Order Service (src/services/order.service.js)
 
 Maps to: `visual_order_lookup/services/order_service.py`
 
-```typescript
-import * as orderQueries from '../database/queries/order.queries';
-import {
-  OrderSummary,
-  OrderHeader,
-  OrderLineItem,
-  DateRangeFilter,
-} from '../models';
-import {
+```javascript
+const orderQueries = require('../database/queries/order.queries');
+const {
   toOrderSummary,
   toOrderHeader,
   toOrderLineItem,
-} from '../utils/transformers';
-import { OrderNotFoundError, ValidationError } from '../utils/errors';
-import { logger } from '../utils/logger';
+} = require('../models/transformers');
+const { OrderNotFoundError, ValidationError } = require('../utils/errors');
+const logger = require('../utils/logger');
 
-export class OrderService {
-  /**
-   * Get recent orders
-   * Maps to: OrderService.load_recent_orders()
-   */
-  async getRecentOrders(limit: number = 100): Promise<OrderSummary[]> {
-    logger.debug(`Fetching ${limit} recent orders`);
+/**
+ * Get recent orders
+ * Maps to: OrderService.load_recent_orders()
+ * @param {number} limit - Maximum orders to return
+ * @returns {Promise<Array>}
+ */
+async function getRecentOrders(limit = 100) {
+  logger.debug(`Fetching ${limit} recent orders`);
 
-    const rows = await orderQueries.getRecentOrders(limit);
-    return rows.map(toOrderSummary);
-  }
-
-  /**
-   * Filter orders by date range
-   * Maps to: OrderService.filter_by_date_range()
-   */
-  async filterByDateRange(
-    filter: DateRangeFilter,
-    limit: number = 100
-  ): Promise<OrderSummary[]> {
-    logger.debug('Filtering orders by date range', { filter, limit });
-
-    const rows = await orderQueries.getOrdersByDateRange(
-      filter.startDate,
-      filter.endDate,
-      limit
-    );
-    return rows.map(toOrderSummary);
-  }
-
-  /**
-   * Get order by job number
-   * Maps to: OrderService.get_order_by_job_number()
-   */
-  async getOrderByJobNumber(jobNumber: string): Promise<OrderHeader> {
-    // Validation
-    if (!jobNumber || !jobNumber.trim()) {
-      throw new ValidationError('Job number cannot be empty');
-    }
-
-    const trimmedJobNumber = jobNumber.trim();
-    logger.debug(`Fetching order: ${trimmedJobNumber}`);
-
-    const row = await orderQueries.getOrderByJobNumber(trimmedJobNumber);
-
-    if (!row) {
-      throw new OrderNotFoundError(trimmedJobNumber);
-    }
-
-    const order = toOrderHeader(row);
-
-    // Fetch line items
-    const lineItemRows = await orderQueries.getOrderLineItems(trimmedJobNumber);
-    order.lineItems = lineItemRows.map(toOrderLineItem);
-
-    return order;
-  }
-
-  /**
-   * Search orders by customer name
-   * Maps to: OrderService.search_by_customer_name()
-   */
-  async searchByCustomerName(
-    customerName: string,
-    filter?: DateRangeFilter,
-    limit: number = 100
-  ): Promise<OrderSummary[]> {
-    // Validation
-    if (!customerName || !customerName.trim()) {
-      throw new ValidationError('Customer name cannot be empty');
-    }
-
-    const trimmedName = customerName.trim();
-    logger.debug(`Searching orders for customer: ${trimmedName}`, { filter, limit });
-
-    const rows = await orderQueries.searchByCustomerName(
-      trimmedName,
-      filter?.startDate,
-      filter?.endDate,
-      limit
-    );
-
-    return rows.map(toOrderSummary);
-  }
-
-  /**
-   * Get order line items only
-   */
-  async getOrderLineItems(jobNumber: string): Promise<OrderLineItem[]> {
-    if (!jobNumber || !jobNumber.trim()) {
-      throw new ValidationError('Job number cannot be empty');
-    }
-
-    const trimmedJobNumber = jobNumber.trim();
-    logger.debug(`Fetching line items for order: ${trimmedJobNumber}`);
-
-    const rows = await orderQueries.getOrderLineItems(trimmedJobNumber);
-    return rows.map(toOrderLineItem);
-  }
+  const rows = await orderQueries.getRecentOrders(limit);
+  return rows.map(toOrderSummary);
 }
 
-// Singleton instance
-export const orderService = new OrderService();
+/**
+ * Filter orders by date range
+ * Maps to: OrderService.filter_by_date_range()
+ * @param {Object} filter - Date range filter
+ * @param {Date} [filter.startDate]
+ * @param {Date} [filter.endDate]
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
+ */
+async function filterByDateRange(filter, limit = 100) {
+  logger.debug('Filtering orders by date range', { filter, limit });
+
+  const rows = await orderQueries.getOrdersByDateRange(
+    filter.startDate,
+    filter.endDate,
+    limit
+  );
+  return rows.map(toOrderSummary);
+}
+
+/**
+ * Get order by job number
+ * Maps to: OrderService.get_order_by_job_number()
+ * @param {string} jobNumber - The job number
+ * @returns {Promise<Object>}
+ */
+async function getOrderByJobNumber(jobNumber) {
+  // Validation
+  if (!jobNumber || !jobNumber.trim()) {
+    throw new ValidationError('Job number cannot be empty');
+  }
+
+  const trimmedJobNumber = jobNumber.trim();
+  logger.debug(`Fetching order: ${trimmedJobNumber}`);
+
+  const row = await orderQueries.getOrderByJobNumber(trimmedJobNumber);
+
+  if (!row) {
+    throw new OrderNotFoundError(trimmedJobNumber);
+  }
+
+  const order = toOrderHeader(row);
+
+  // Fetch line items
+  const lineItemRows = await orderQueries.getOrderLineItems(trimmedJobNumber);
+  order.lineItems = lineItemRows.map(toOrderLineItem);
+
+  return order;
+}
+
+/**
+ * Search orders by customer name
+ * Maps to: OrderService.search_by_customer_name()
+ * @param {string} customerName - Customer name pattern
+ * @param {Object} [filter] - Optional date filter
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
+ */
+async function searchByCustomerName(customerName, filter = {}, limit = 100) {
+  // Validation
+  if (!customerName || !customerName.trim()) {
+    throw new ValidationError('Customer name cannot be empty');
+  }
+
+  const trimmedName = customerName.trim();
+  logger.debug(`Searching orders for customer: ${trimmedName}`, { filter, limit });
+
+  const rows = await orderQueries.searchByCustomerName(
+    trimmedName,
+    filter.startDate,
+    filter.endDate,
+    limit
+  );
+
+  return rows.map(toOrderSummary);
+}
+
+/**
+ * Get order line items only
+ * @param {string} jobNumber - The job number
+ * @returns {Promise<Array>}
+ */
+async function getOrderLineItems(jobNumber) {
+  if (!jobNumber || !jobNumber.trim()) {
+    throw new ValidationError('Job number cannot be empty');
+  }
+
+  const trimmedJobNumber = jobNumber.trim();
+  logger.debug(`Fetching line items for order: ${trimmedJobNumber}`);
+
+  const rows = await orderQueries.getOrderLineItems(trimmedJobNumber);
+  return rows.map(toOrderLineItem);
+}
+
+module.exports = {
+  getRecentOrders,
+  filterByDateRange,
+  getOrderByJobNumber,
+  searchByCustomerName,
+  getOrderLineItems,
+};
 ```
 
 ---
 
-## Part Service (src/services/part.service.ts)
+## Part Service (src/services/part.service.js)
 
 Maps to: `visual_order_lookup/services/part_service.py`
 
-```typescript
-import * as partQueries from '../database/queries/part.queries';
-import {
-  Part,
-  PartSearchResult,
-  WhereUsed,
-  PurchaseHistory,
-} from '../models';
-import {
+```javascript
+const partQueries = require('../database/queries/part.queries');
+const {
   toPart,
   toWhereUsed,
   toPurchaseHistory,
-} from '../utils/transformers';
-import { PartNotFoundError, ValidationError } from '../utils/errors';
-import { logger } from '../utils/logger';
+} = require('../models/transformers');
+const { PartNotFoundError, ValidationError } = require('../utils/errors');
+const logger = require('../utils/logger');
 
-export class PartService {
-  /**
-   * Get part by part number
-   * Maps to: PartService.search_by_part_number()
-   */
-  async getPartByNumber(partNumber: string): Promise<Part> {
-    // Validation
-    if (!partNumber || !partNumber.trim()) {
-      throw new ValidationError('Part number cannot be empty');
-    }
-
-    const trimmedPartNumber = partNumber.trim().toUpperCase();
-    logger.debug(`Fetching part: ${trimmedPartNumber}`);
-
-    const row = await partQueries.getPartByNumber(trimmedPartNumber);
-
-    if (!row) {
-      throw new PartNotFoundError(trimmedPartNumber);
-    }
-
-    return toPart(row);
+/**
+ * Get part by part number
+ * Maps to: PartService.search_by_part_number()
+ * @param {string} partNumber - The part ID
+ * @returns {Promise<Object>}
+ */
+async function getPartByNumber(partNumber) {
+  // Validation
+  if (!partNumber || !partNumber.trim()) {
+    throw new ValidationError('Part number cannot be empty');
   }
 
-  /**
-   * Search parts by partial number
-   */
-  async searchParts(
-    searchPattern: string,
-    limit: number = 100
-  ): Promise<PartSearchResult[]> {
-    if (!searchPattern || !searchPattern.trim()) {
-      throw new ValidationError('Search pattern cannot be empty');
-    }
+  const trimmedPartNumber = partNumber.trim().toUpperCase();
+  logger.debug(`Fetching part: ${trimmedPartNumber}`);
 
-    const trimmedPattern = searchPattern.trim().toUpperCase();
-    logger.debug(`Searching parts with pattern: ${trimmedPattern}`);
+  const row = await partQueries.getPartByNumber(trimmedPartNumber);
 
-    const rows = await partQueries.searchParts(trimmedPattern, limit);
-
-    return rows.map(row => ({
-      partId: row.partId,
-      description: row.description,
-      stockUm: row.stockUm,
-      standardCost: row.standardCost,
-      qtyOnHand: row.qtyOnHand,
-      qtyAvailable: row.qtyAvailable,
-    }));
+  if (!row) {
+    throw new PartNotFoundError(trimmedPartNumber);
   }
 
-  /**
-   * Get where-used information for a part
-   * Maps to: PartService.get_where_used()
-   */
-  async getWhereUsed(
-    partNumber: string,
-    limit: number = 100
-  ): Promise<WhereUsed[]> {
-    if (!partNumber || !partNumber.trim()) {
-      throw new ValidationError('Part number cannot be empty');
-    }
-
-    const trimmedPartNumber = partNumber.trim().toUpperCase();
-    logger.debug(`Fetching where-used for part: ${trimmedPartNumber}`);
-
-    const rows = await partQueries.getWhereUsed(trimmedPartNumber, limit);
-    return rows.map(toWhereUsed);
-  }
-
-  /**
-   * Get purchase history for a part
-   * Maps to: PartService.get_purchase_history()
-   */
-  async getPurchaseHistory(
-    partNumber: string,
-    limit: number = 100
-  ): Promise<PurchaseHistory[]> {
-    if (!partNumber || !partNumber.trim()) {
-      throw new ValidationError('Part number cannot be empty');
-    }
-
-    const trimmedPartNumber = partNumber.trim().toUpperCase();
-    logger.debug(`Fetching purchase history for part: ${trimmedPartNumber}`);
-
-    const rows = await partQueries.getPurchaseHistory(trimmedPartNumber, limit);
-    return rows.map(toPurchaseHistory);
-  }
+  return toPart(row);
 }
 
-// Singleton instance
-export const partService = new PartService();
+/**
+ * Search parts by partial number
+ * @param {string} searchPattern - Search pattern
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
+ */
+async function searchParts(searchPattern, limit = 100) {
+  if (!searchPattern || !searchPattern.trim()) {
+    throw new ValidationError('Search pattern cannot be empty');
+  }
+
+  const trimmedPattern = searchPattern.trim().toUpperCase();
+  logger.debug(`Searching parts with pattern: ${trimmedPattern}`);
+
+  const rows = await partQueries.searchParts(trimmedPattern, limit);
+
+  return rows.map(row => ({
+    partId: row.partId,
+    description: row.description,
+    stockUm: row.stockUm,
+    standardCost: row.standardCost,
+    qtyOnHand: row.qtyOnHand,
+    qtyAvailable: row.qtyAvailable,
+  }));
+}
+
+/**
+ * Get where-used information for a part
+ * Maps to: PartService.get_where_used()
+ * @param {string} partNumber - The part ID
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
+ */
+async function getWhereUsed(partNumber, limit = 100) {
+  if (!partNumber || !partNumber.trim()) {
+    throw new ValidationError('Part number cannot be empty');
+  }
+
+  const trimmedPartNumber = partNumber.trim().toUpperCase();
+  logger.debug(`Fetching where-used for part: ${trimmedPartNumber}`);
+
+  const rows = await partQueries.getWhereUsed(trimmedPartNumber, limit);
+  return rows.map(toWhereUsed);
+}
+
+/**
+ * Get purchase history for a part
+ * Maps to: PartService.get_purchase_history()
+ * @param {string} partNumber - The part ID
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
+ */
+async function getPurchaseHistory(partNumber, limit = 100) {
+  if (!partNumber || !partNumber.trim()) {
+    throw new ValidationError('Part number cannot be empty');
+  }
+
+  const trimmedPartNumber = partNumber.trim().toUpperCase();
+  logger.debug(`Fetching purchase history for part: ${trimmedPartNumber}`);
+
+  const rows = await partQueries.getPurchaseHistory(trimmedPartNumber, limit);
+  return rows.map(toPurchaseHistory);
+}
+
+module.exports = {
+  getPartByNumber,
+  searchParts,
+  getWhereUsed,
+  getPurchaseHistory,
+};
 ```
 
 ---
 
-## Work Order Service (src/services/workorder.service.ts)
+## Work Order Service (src/services/workorder.service.js)
 
 Maps to: `visual_order_lookup/services/work_order_service.py`
 
-```typescript
-import * as workorderQueries from '../database/queries/workorder.queries';
-import {
-  WorkOrder,
-  WorkOrderHeader,
-  WorkOrderId,
-  Operation,
-  Requirement,
-  LaborTicket,
-  InventoryTransaction,
-  WIPBalance,
-} from '../models';
-import {
+```javascript
+const workorderQueries = require('../database/queries/workorder.queries');
+const {
   toWorkOrder,
   toWorkOrderHeader,
   toOperation,
@@ -282,345 +275,243 @@ import {
   toLaborTicket,
   toInventoryTransaction,
   toWIPBalance,
-} from '../utils/transformers';
-import { WorkOrderNotFoundError, ValidationError } from '../utils/errors';
-import { logger } from '../utils/logger';
+} = require('../models/transformers');
+const { WorkOrderNotFoundError, ValidationError } = require('../utils/errors');
+const logger = require('../utils/logger');
 
-export class WorkOrderService {
-  /**
-   * Search work orders by base ID pattern
-   * Maps to: WorkOrderService.search_work_orders()
-   */
-  async searchWorkOrders(
-    baseIdPattern: string,
-    limit: number = 100
-  ): Promise<WorkOrder[]> {
-    if (!baseIdPattern || !baseIdPattern.trim()) {
-      throw new ValidationError('Base ID pattern cannot be empty');
-    }
-
-    const trimmedPattern = baseIdPattern.trim().toUpperCase();
-    logger.debug(`Searching work orders with pattern: ${trimmedPattern}`);
-
-    const rows = await workorderQueries.searchWorkOrders(trimmedPattern, limit);
-    return rows.map(toWorkOrder);
+/**
+ * Search work orders by base ID pattern
+ * Maps to: WorkOrderService.search_work_orders()
+ * @param {string} baseIdPattern - Base ID search pattern
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
+ */
+async function searchWorkOrders(baseIdPattern, limit = 100) {
+  if (!baseIdPattern || !baseIdPattern.trim()) {
+    throw new ValidationError('Base ID pattern cannot be empty');
   }
 
-  /**
-   * Get work order header with counts
-   * Maps to: WorkOrderService.get_work_order_header()
-   */
-  async getWorkOrderHeader(
-    baseId: string,
-    lotId: string,
-    subId: string
-  ): Promise<WorkOrderHeader> {
-    this.validateWorkOrderId(baseId, lotId, subId);
+  const trimmedPattern = baseIdPattern.trim().toUpperCase();
+  logger.debug(`Searching work orders with pattern: ${trimmedPattern}`);
 
-    logger.debug(`Fetching work order: ${baseId}/${lotId}/${subId}`);
+  const rows = await workorderQueries.searchWorkOrders(trimmedPattern, limit);
+  return rows.map(toWorkOrder);
+}
 
-    const row = await workorderQueries.getWorkOrderHeader(
-      baseId.trim(),
-      lotId.trim(),
-      subId.trim()
-    );
+/**
+ * Get work order header with counts
+ * Maps to: WorkOrderService.get_work_order_header()
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Object>}
+ */
+async function getWorkOrderHeader(baseId, lotId, subId) {
+  validateWorkOrderId(baseId, lotId, subId);
 
-    if (!row) {
-      throw new WorkOrderNotFoundError(baseId, lotId, subId);
-    }
+  logger.debug(`Fetching work order: ${baseId}/${lotId}/${subId}`);
 
-    return toWorkOrderHeader(row);
+  const row = await workorderQueries.getWorkOrderHeader(
+    baseId.trim(),
+    lotId.trim(),
+    subId.trim()
+  );
+
+  if (!row) {
+    throw new WorkOrderNotFoundError(baseId, lotId, subId);
   }
 
-  /**
-   * Get operations for a work order (lazy load)
-   * Maps to: WorkOrderService.get_operations()
-   */
-  async getOperations(
-    baseId: string,
-    lotId: string,
-    subId: string
-  ): Promise<Operation[]> {
-    this.validateWorkOrderId(baseId, lotId, subId);
+  return toWorkOrderHeader(row);
+}
 
-    logger.debug(`Fetching operations for: ${baseId}/${lotId}/${subId}`);
+/**
+ * Get operations for a work order (lazy load)
+ * Maps to: WorkOrderService.get_operations()
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Array>}
+ */
+async function getOperations(baseId, lotId, subId) {
+  validateWorkOrderId(baseId, lotId, subId);
 
-    const rows = await workorderQueries.getOperations(
-      baseId.trim(),
-      lotId.trim(),
-      subId.trim()
-    );
+  logger.debug(`Fetching operations for: ${baseId}/${lotId}/${subId}`);
 
-    return rows.map(toOperation);
+  const rows = await workorderQueries.getOperations(
+    baseId.trim(),
+    lotId.trim(),
+    subId.trim()
+  );
+
+  return rows.map(toOperation);
+}
+
+/**
+ * Get requirements for a work order or operation (lazy load)
+ * Maps to: WorkOrderService.get_requirements()
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @param {number} [operationSeqNo] - Optional operation sequence filter
+ * @returns {Promise<Array>}
+ */
+async function getRequirements(baseId, lotId, subId, operationSeqNo) {
+  validateWorkOrderId(baseId, lotId, subId);
+
+  logger.debug(`Fetching requirements for: ${baseId}/${lotId}/${subId}`, {
+    operationSeqNo,
+  });
+
+  const rows = await workorderQueries.getRequirements(
+    baseId.trim(),
+    lotId.trim(),
+    subId.trim(),
+    operationSeqNo
+  );
+
+  return rows.map(row => toRequirement(row, baseId.trim(), lotId.trim()));
+}
+
+/**
+ * Get labor tickets for a work order (lazy load)
+ * Maps to: WorkOrderService.get_labor_tickets()
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Array>}
+ */
+async function getLaborTickets(baseId, lotId, subId) {
+  validateWorkOrderId(baseId, lotId, subId);
+
+  logger.debug(`Fetching labor tickets for: ${baseId}/${lotId}/${subId}`);
+
+  const rows = await workorderQueries.getLaborTickets(
+    baseId.trim(),
+    lotId.trim(),
+    subId.trim()
+  );
+
+  return rows.map(toLaborTicket);
+}
+
+/**
+ * Get inventory transactions for a work order (lazy load)
+ * Maps to: WorkOrderService.get_inventory_transactions()
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Array>}
+ */
+async function getInventoryTransactions(baseId, lotId, subId) {
+  validateWorkOrderId(baseId, lotId, subId);
+
+  logger.debug(`Fetching inventory transactions for: ${baseId}/${lotId}/${subId}`);
+
+  const rows = await workorderQueries.getInventoryTransactions(
+    baseId.trim(),
+    lotId.trim(),
+    subId.trim()
+  );
+
+  return rows.map(toInventoryTransaction);
+}
+
+/**
+ * Get WIP balance for a work order
+ * Maps to: WorkOrderService.get_wip_balance()
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Object|null>}
+ */
+async function getWIPBalance(baseId, lotId, subId) {
+  validateWorkOrderId(baseId, lotId, subId);
+
+  logger.debug(`Fetching WIP balance for: ${baseId}/${lotId}/${subId}`);
+
+  const row = await workorderQueries.getWIPBalance(
+    baseId.trim(),
+    lotId.trim(),
+    subId.trim()
+  );
+
+  return row ? toWIPBalance(row) : null;
+}
+
+/**
+ * Get work order hierarchy (recursive)
+ * Maps to: WorkOrderService.get_work_order_hierarchy()
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Array>}
+ */
+async function getWorkOrderHierarchy(baseId, lotId, subId) {
+  validateWorkOrderId(baseId, lotId, subId);
+
+  logger.debug(`Fetching hierarchy for: ${baseId}/${lotId}/${subId}`);
+
+  const rows = await workorderQueries.getWorkOrderHierarchy(
+    baseId.trim(),
+    lotId.trim(),
+    subId.trim()
+  );
+
+  return rows.map(toWorkOrder);
+}
+
+/**
+ * Validate work order ID components
+ * @param {string} baseId
+ * @param {string} lotId
+ * @param {string} subId
+ */
+function validateWorkOrderId(baseId, lotId, subId) {
+  if (!baseId || !baseId.trim()) {
+    throw new ValidationError('Base ID cannot be empty');
   }
-
-  /**
-   * Get requirements for a work order or operation (lazy load)
-   * Maps to: WorkOrderService.get_requirements()
-   */
-  async getRequirements(
-    baseId: string,
-    lotId: string,
-    subId: string,
-    operationSeqNo?: number
-  ): Promise<Requirement[]> {
-    this.validateWorkOrderId(baseId, lotId, subId);
-
-    logger.debug(`Fetching requirements for: ${baseId}/${lotId}/${subId}`, {
-      operationSeqNo,
-    });
-
-    const rows = await workorderQueries.getRequirements(
-      baseId.trim(),
-      lotId.trim(),
-      subId.trim(),
-      operationSeqNo
-    );
-
-    return rows.map(row => toRequirement(row, baseId.trim(), lotId.trim()));
+  if (!lotId || !lotId.trim()) {
+    throw new ValidationError('Lot ID cannot be empty');
   }
-
-  /**
-   * Get labor tickets for a work order (lazy load)
-   * Maps to: WorkOrderService.get_labor_tickets()
-   */
-  async getLaborTickets(
-    baseId: string,
-    lotId: string,
-    subId: string
-  ): Promise<LaborTicket[]> {
-    this.validateWorkOrderId(baseId, lotId, subId);
-
-    logger.debug(`Fetching labor tickets for: ${baseId}/${lotId}/${subId}`);
-
-    const rows = await workorderQueries.getLaborTickets(
-      baseId.trim(),
-      lotId.trim(),
-      subId.trim()
-    );
-
-    return rows.map(toLaborTicket);
-  }
-
-  /**
-   * Get inventory transactions for a work order (lazy load)
-   * Maps to: WorkOrderService.get_inventory_transactions()
-   */
-  async getInventoryTransactions(
-    baseId: string,
-    lotId: string,
-    subId: string
-  ): Promise<InventoryTransaction[]> {
-    this.validateWorkOrderId(baseId, lotId, subId);
-
-    logger.debug(`Fetching inventory transactions for: ${baseId}/${lotId}/${subId}`);
-
-    const rows = await workorderQueries.getInventoryTransactions(
-      baseId.trim(),
-      lotId.trim(),
-      subId.trim()
-    );
-
-    return rows.map(toInventoryTransaction);
-  }
-
-  /**
-   * Get WIP balance for a work order
-   * Maps to: WorkOrderService.get_wip_balance()
-   */
-  async getWIPBalance(
-    baseId: string,
-    lotId: string,
-    subId: string
-  ): Promise<WIPBalance | null> {
-    this.validateWorkOrderId(baseId, lotId, subId);
-
-    logger.debug(`Fetching WIP balance for: ${baseId}/${lotId}/${subId}`);
-
-    const row = await workorderQueries.getWIPBalance(
-      baseId.trim(),
-      lotId.trim(),
-      subId.trim()
-    );
-
-    return row ? toWIPBalance(row) : null;
-  }
-
-  /**
-   * Get work order hierarchy (recursive)
-   * Maps to: WorkOrderService.get_work_order_hierarchy()
-   */
-  async getWorkOrderHierarchy(
-    baseId: string,
-    lotId: string,
-    subId: string
-  ): Promise<WorkOrder[]> {
-    this.validateWorkOrderId(baseId, lotId, subId);
-
-    logger.debug(`Fetching hierarchy for: ${baseId}/${lotId}/${subId}`);
-
-    const rows = await workorderQueries.getWorkOrderHierarchy(
-      baseId.trim(),
-      lotId.trim(),
-      subId.trim()
-    );
-
-    return rows.map(toWorkOrder);
-  }
-
-  /**
-   * Validate work order ID components
-   */
-  private validateWorkOrderId(baseId: string, lotId: string, subId: string): void {
-    if (!baseId || !baseId.trim()) {
-      throw new ValidationError('Base ID cannot be empty');
-    }
-    if (!lotId || !lotId.trim()) {
-      throw new ValidationError('Lot ID cannot be empty');
-    }
-    if (!subId || subId.trim() === '') {
-      throw new ValidationError('Sub ID cannot be empty');
-    }
+  if (subId === undefined || subId === null || subId.toString().trim() === '') {
+    throw new ValidationError('Sub ID cannot be empty');
   }
 }
 
-// Singleton instance
-export const workOrderService = new WorkOrderService();
+module.exports = {
+  searchWorkOrders,
+  getWorkOrderHeader,
+  getOperations,
+  getRequirements,
+  getLaborTickets,
+  getInventoryTransactions,
+  getWIPBalance,
+  getWorkOrderHierarchy,
+};
 ```
 
 ---
 
-## BOM Service (src/services/bom.service.ts)
+## Service Index (src/services/index.js)
 
-Maps to: `visual_order_lookup/services/bom_service.py`
+```javascript
+const orderService = require('./order.service');
+const partService = require('./part.service');
+const workorderService = require('./workorder.service');
 
-```typescript
-import * as bomQueries from '../database/queries/bom.queries';
-import { BOMNode, Job } from '../models';
-import { toBOMNode, toJob } from '../utils/transformers';
-import { JobNotFoundError, ValidationError } from '../utils/errors';
-import { logger } from '../utils/logger';
-
-export interface BOMAssembly {
-  jobNumber: string;
-  lotId: string;
-  partId: string;
-  partDescription: string;
-  orderQty: number;
-  status: string;
-  hasChildren: boolean;
-}
-
-export class BOMService {
-  /**
-   * Get job information
-   * Maps to: BOMService.get_job_info()
-   */
-  async getJobInfo(jobNumber: string): Promise<Job> {
-    if (!jobNumber || !jobNumber.trim()) {
-      throw new ValidationError('Job number cannot be empty');
-    }
-
-    const trimmedJobNumber = jobNumber.trim();
-    logger.debug(`Fetching job info: ${trimmedJobNumber}`);
-
-    const row = await bomQueries.getJobInfo(trimmedJobNumber);
-
-    if (!row) {
-      throw new JobNotFoundError(trimmedJobNumber);
-    }
-
-    return toJob(row);
-  }
-
-  /**
-   * Get top-level BOM assemblies for a job
-   * Maps to: BOMService.get_bom_assemblies()
-   */
-  async getBOMAssemblies(jobNumber: string): Promise<BOMAssembly[]> {
-    if (!jobNumber || !jobNumber.trim()) {
-      throw new ValidationError('Job number cannot be empty');
-    }
-
-    const trimmedJobNumber = jobNumber.trim();
-    logger.debug(`Fetching BOM assemblies for job: ${trimmedJobNumber}`);
-
-    const rows = await bomQueries.getBOMAssemblies(trimmedJobNumber);
-
-    return rows.map(row => ({
-      jobNumber: row.jobNumber,
-      lotId: row.lotId,
-      partId: row.partId,
-      partDescription: row.partDescription,
-      orderQty: row.orderQty,
-      status: row.status,
-      hasChildren: row.childCount > 0,
-    }));
-  }
-
-  /**
-   * Get child parts for an assembly (lazy load)
-   * Maps to: BOMService.get_assembly_parts()
-   */
-  async getAssemblyParts(
-    jobNumber: string,
-    lotId: string
-  ): Promise<BOMNode[]> {
-    if (!jobNumber || !jobNumber.trim()) {
-      throw new ValidationError('Job number cannot be empty');
-    }
-    if (!lotId || !lotId.trim()) {
-      throw new ValidationError('Lot ID cannot be empty');
-    }
-
-    logger.debug(`Fetching assembly parts for: ${jobNumber}/${lotId}`);
-
-    const rows = await bomQueries.getAssemblyParts(
-      jobNumber.trim(),
-      lotId.trim()
-    );
-
-    return rows.map(toBOMNode);
-  }
-
-  /**
-   * Get complete BOM hierarchy for a job
-   * Maps to: BOMService.get_bom_hierarchy()
-   */
-  async getBOMHierarchy(jobNumber: string): Promise<BOMNode[]> {
-    if (!jobNumber || !jobNumber.trim()) {
-      throw new ValidationError('Job number cannot be empty');
-    }
-
-    const trimmedJobNumber = jobNumber.trim();
-    logger.debug(`Fetching complete BOM hierarchy for job: ${trimmedJobNumber}`);
-
-    const rows = await bomQueries.getBOMHierarchy(trimmedJobNumber);
-    return rows.map(toBOMNode);
-  }
-}
-
-// Singleton instance
-export const bomService = new BOMService();
+module.exports = {
+  orderService,
+  partService,
+  workorderService,
+};
 ```
 
 ---
 
-## Service Index (src/services/index.ts)
+## Python to JavaScript Mapping Summary
 
-```typescript
-export { OrderService, orderService } from './order.service';
-export { PartService, partService } from './part.service';
-export { WorkOrderService, workOrderService } from './workorder.service';
-export { BOMService, bomService } from './bom.service';
-```
-
----
-
-## Python to TypeScript Mapping Summary
-
-| Python Service Method | TypeScript Service Method |
-|-----------------------|---------------------------|
+| Python Service Method | JavaScript Function |
+|-----------------------|---------------------|
 | `OrderService.load_recent_orders()` | `orderService.getRecentOrders()` |
 | `OrderService.filter_by_date_range()` | `orderService.filterByDateRange()` |
 | `OrderService.get_order_by_job_number()` | `orderService.getOrderByJobNumber()` |
@@ -628,18 +519,14 @@ export { BOMService, bomService } from './bom.service';
 | `PartService.search_by_part_number()` | `partService.getPartByNumber()` |
 | `PartService.get_where_used()` | `partService.getWhereUsed()` |
 | `PartService.get_purchase_history()` | `partService.getPurchaseHistory()` |
-| `WorkOrderService.search_work_orders()` | `workOrderService.searchWorkOrders()` |
-| `WorkOrderService.get_work_order_header()` | `workOrderService.getWorkOrderHeader()` |
-| `WorkOrderService.get_operations()` | `workOrderService.getOperations()` |
-| `WorkOrderService.get_requirements()` | `workOrderService.getRequirements()` |
-| `WorkOrderService.get_labor_tickets()` | `workOrderService.getLaborTickets()` |
-| `WorkOrderService.get_inventory_transactions()` | `workOrderService.getInventoryTransactions()` |
-| `WorkOrderService.get_wip_balance()` | `workOrderService.getWIPBalance()` |
-| `WorkOrderService.get_work_order_hierarchy()` | `workOrderService.getWorkOrderHierarchy()` |
-| `BOMService.get_job_info()` | `bomService.getJobInfo()` |
-| `BOMService.get_bom_assemblies()` | `bomService.getBOMAssemblies()` |
-| `BOMService.get_assembly_parts()` | `bomService.getAssemblyParts()` |
-| `BOMService.get_bom_hierarchy()` | `bomService.getBOMHierarchy()` |
+| `WorkOrderService.search_work_orders()` | `workorderService.searchWorkOrders()` |
+| `WorkOrderService.get_work_order_header()` | `workorderService.getWorkOrderHeader()` |
+| `WorkOrderService.get_operations()` | `workorderService.getOperations()` |
+| `WorkOrderService.get_requirements()` | `workorderService.getRequirements()` |
+| `WorkOrderService.get_labor_tickets()` | `workorderService.getLaborTickets()` |
+| `WorkOrderService.get_inventory_transactions()` | `workorderService.getInventoryTransactions()` |
+| `WorkOrderService.get_wip_balance()` | `workorderService.getWIPBalance()` |
+| `WorkOrderService.get_work_order_hierarchy()` | `workorderService.getWorkOrderHierarchy()` |
 
 ---
 
@@ -660,10 +547,10 @@ class DatabaseWorker(QObject):
             self.error.emit(str(e))
 ```
 
-**TypeScript (Express):**
-```typescript
+**JavaScript (Express):**
+```javascript
 // No manual threading needed - Express handles async naturally
-async getRecentOrders(limit: number): Promise<OrderSummary[]> {
+async function getRecentOrders(limit) {
   const rows = await orderQueries.getRecentOrders(limit);
   return rows.map(toOrderSummary);
 }
@@ -677,24 +564,30 @@ except pyodbc.Error as e:
     raise Exception(f"Failed to search: {str(e)}")
 ```
 
-**TypeScript:**
-```typescript
+**JavaScript:**
+```javascript
 // Errors propagate automatically through async/await
 // Global error middleware handles translation to HTTP responses
 throw new OrderNotFoundError(jobNumber);
 ```
 
-### 3. Connection Management
+### 3. Class-based vs Function-based
 **Python:**
 ```python
-cursor = self.connection.get_cursor()
-# ... use cursor
-cursor.close()
+class OrderService:
+    def __init__(self, connection):
+        self.connection = connection
+
+    def get_order_by_job_number(self, job_number):
+        # ...
 ```
 
-**TypeScript:**
-```typescript
-// Connection pool handles connection lifecycle automatically
-const rows = await orderQueries.getRecentOrders(limit);
-// No manual cleanup needed
+**JavaScript:**
+```javascript
+// Simpler function-based approach
+async function getOrderByJobNumber(jobNumber) {
+  // Connection pool handled by database layer
+}
+
+module.exports = { getOrderByJobNumber };
 ```

@@ -2,588 +2,26 @@
 
 ## Overview
 
-This document defines the TypeScript interfaces and types that mirror the Python DTOs from the existing application. These models serve as the contract between database queries and API responses.
+This document defines the JavaScript data structures and JSDoc type definitions that mirror the Python DTOs from the existing application. These models serve as the contract between database queries and API responses.
 
 ## File Structure
 
 ```
 src/models/
-├── index.ts              # Export all models
-├── common.model.ts       # Shared types and utilities
-├── order.model.ts        # Order-related interfaces
-├── part.model.ts         # Part-related interfaces
-└── workorder.model.ts    # Work order interfaces
+├── index.js              # Export all models
+├── constants.js          # Status codes and lookup tables
+└── transformers.js       # Row to response object transformers
 ```
 
 ---
 
-## Common Models (src/models/common.model.ts)
+## Constants (src/models/constants.js)
 
-```typescript
-/**
- * Standard API response wrapper
- */
-export interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: ApiError;
-  meta?: ResponseMeta;
-}
-
-/**
- * Error response structure
- */
-export interface ApiError {
-  code: string;
-  message: string;
-  details?: Record<string, unknown>;
-}
-
-/**
- * Response metadata
- */
-export interface ResponseMeta {
-  timestamp: string;
-  count?: number;
-  filters?: Record<string, unknown>;
-  [key: string]: unknown;
-}
-
-/**
- * Date range filter
- */
-export interface DateRangeFilter {
-  startDate?: Date;
-  endDate?: Date;
-}
-
-/**
- * Pagination options
- */
-export interface PaginationOptions {
-  limit?: number;
-  offset?: number;
-}
-
-/**
- * Address structure
- */
-export interface Address {
-  address1?: string;
-  address2?: string;
-  city?: string;
-  state?: string;
-  zip?: string;
-  country?: string;
-}
-
-/**
- * Formatted display values
- */
-export interface FormattedFields {
-  [key: string]: string | undefined;
-}
-```
-
----
-
-## Order Models (src/models/order.model.ts)
-
-```typescript
-import { Address, FormattedFields } from './common.model';
-
-/**
- * Order summary for list views
- * Maps to: Python OrderSummary dataclass
- */
-export interface OrderSummary {
-  jobNumber: string;
-  customerName: string;
-  orderDate: Date;
-  totalAmount: number;
-  customerPO?: string;
-  formatted?: OrderSummaryFormatted;
-}
-
-export interface OrderSummaryFormatted extends FormattedFields {
-  orderDate: string;      // MM/DD/YYYY
-  totalAmount: string;    // $X,XXX.XX
-}
-
-/**
- * Customer contact information
- */
-export interface CustomerContact {
-  name?: string;
-  phone?: string;
-  fax?: string;
-  email?: string;
-}
-
-/**
- * Customer with addresses
- * Maps to: Python Customer dataclass
- */
-export interface Customer {
-  id: string;
-  name: string;
-  shipping: Address;
-  billing: Address & { name?: string };
-  contact: CustomerContact;
-}
-
-/**
- * Order line item
- * Maps to: Python OrderLineItem dataclass
- */
-export interface OrderLineItem {
-  lineNumber: number;
-  partId: string;
-  partDescription?: string;
-  orderQty: number;
-  unitPrice: number;
-  lineTotal: number;
-  desiredShipDate?: Date;
-  promisedShipDate?: Date;
-  baseId?: string;
-  lotId?: string;
-  binaryDetails?: string;
-  formatted?: OrderLineItemFormatted;
-}
-
-export interface OrderLineItemFormatted extends FormattedFields {
-  unitPrice: string;
-  lineTotal: string;
-  desiredShipDate?: string;
-  promisedShipDate?: string;
-}
-
-/**
- * Complete order header with customer and line items
- * Maps to: Python OrderHeader dataclass
- */
-export interface OrderHeader {
-  jobNumber: string;
-  orderDate: Date;
-  totalAmount: number;
-  customerPO?: string;
-  desiredShipDate?: Date;
-  promisedDate?: Date;
-  notes?: string[];
-  customer: Customer;
-  lineItems?: OrderLineItem[];
-  formatted?: OrderHeaderFormatted;
-}
-
-export interface OrderHeaderFormatted extends FormattedFields {
-  orderDate: string;
-  totalAmount: string;
-  desiredShipDate?: string;
-  promisedDate?: string;
-}
-
-/**
- * Database row type for order query results
- */
-export interface OrderRow {
-  jobNumber: string;
-  orderDate: Date;
-  totalAmount: number;
-  customerPO: string | null;
-  desiredShipDate: Date | null;
-  promisedDate: Date | null;
-  note1: string | null;
-  note2: string | null;
-  customerId: string;
-  customerName: string;
-  shipAddr1: string | null;
-  shipAddr2: string | null;
-  shipCity: string | null;
-  shipState: string | null;
-  shipZip: string | null;
-  shipCountry: string | null;
-  billToName: string | null;
-  billAddr1: string | null;
-  billAddr2: string | null;
-  billCity: string | null;
-  billState: string | null;
-  billZip: string | null;
-  billCountry: string | null;
-  contactName: string | null;
-  phoneNumber: string | null;
-  faxNumber: string | null;
-  email: string | null;
-}
-```
-
----
-
-## Part Models (src/models/part.model.ts)
-
-```typescript
-import { FormattedFields } from './common.model';
-
-/**
- * Part cost breakdown
- */
-export interface PartCosts {
-  material: number;
-  labor: number;
-  burden: number;
-  service: number;
-  standard: number;
-  last: number;
-  average: number;
-}
-
-/**
- * Part quantity levels
- */
-export interface PartQuantities {
-  onHand: number;
-  onOrder: number;
-  allocated: number;
-  available: number;
-}
-
-/**
- * Part flags
- */
-export interface PartFlags {
-  purchased: boolean;
-  fabricated: boolean;
-  stocked: boolean;
-}
-
-/**
- * Part master data
- * Maps to: Python Part dataclass
- */
-export interface Part {
-  partId: string;
-  description: string;
-  stockUm: string;
-  costs: PartCosts;
-  quantities: PartQuantities;
-  flags: PartFlags;
-  vendorName?: string;
-  formatted?: PartFormatted;
-}
-
-export interface PartFormatted extends FormattedFields {
-  standardCost: string;
-  qtyAvailable: string;
-}
-
-/**
- * Simplified part for search results
- */
-export interface PartSearchResult {
-  partId: string;
-  description: string;
-  stockUm: string;
-  standardCost: number;
-  qtyOnHand: number;
-  qtyAvailable: number;
-}
-
-/**
- * Work order ID composite key
- */
-export interface WorkOrderId {
-  baseId: string;
-  lotId: string;
-  subId: string;
-}
-
-/**
- * Where-used record showing which work orders use a part
- * Maps to: Python WhereUsed dataclass
- */
-export interface WhereUsed {
-  workOrderId: WorkOrderId;
-  parentPartId: string;
-  parentDescription: string;
-  workOrderStatus: string;
-  qtyPer: number;
-  fixedQty: number;
-  formatted?: WhereUsedFormatted;
-}
-
-export interface WhereUsedFormatted extends FormattedFields {
-  workOrderId: string;    // BASE-SUB/LOT format
-  status: string;         // Human-readable status
-}
-
-/**
- * Purchase history record
- * Maps to: Python PurchaseHistory dataclass
- */
-export interface PurchaseHistory {
-  purchaseOrderId: string;
-  lineNumber: number;
-  vendorName: string;
-  orderQty: number;
-  unitPrice: number;
-  desiredReceiveDate?: Date;
-  receivedQty: number;
-  lastReceiveDate?: Date;
-  formatted?: PurchaseHistoryFormatted;
-}
-
-export interface PurchaseHistoryFormatted extends FormattedFields {
-  unitPrice: string;
-  desiredReceiveDate?: string;
-  lastReceiveDate?: string;
-}
-
-/**
- * Database row type for part query results
- */
-export interface PartRow {
-  partId: string;
-  description: string;
-  stockUm: string;
-  materialCost: number;
-  laborCost: number;
-  burdenCost: number;
-  serviceCost: number;
-  standardCost: number;
-  lastCost: number;
-  avgCost: number;
-  qtyOnHand: number;
-  qtyOnOrder: number;
-  qtyAllocated: number;
-  qtyAvailable: number;
-  purchased: string;    // Y/N
-  fabricated: string;   // Y/N
-  stocked: string;      // Y/N
-  vendorName: string | null;
-}
-```
-
----
-
-## Work Order Models (src/models/workorder.model.ts)
-
-```typescript
-import { FormattedFields } from './common.model';
-
-/**
- * Work order composite key
- */
-export interface WorkOrderId {
-  baseId: string;
-  lotId: string;
-  subId: string;
-}
-
-/**
- * Work order date fields
- */
-export interface WorkOrderDates {
-  desiredStart?: Date;
-  desiredCompl?: Date;
-  actualStart?: Date;
-  actualCompl?: Date;
-}
-
-/**
- * Work order quantities
- */
-export interface WorkOrderQuantities {
-  ordered: number;
-  completed: number;
-  scrapped: number;
-}
-
-/**
- * Work order for list views
- * Maps to: Python WorkOrder dataclass
- */
-export interface WorkOrder {
-  id: WorkOrderId;
-  partId: string;
-  partDescription: string;
-  orderQty: number;
-  status: string;
-  type: string;
-  dates: WorkOrderDates;
-  hierarchyLevel?: number;
-  hierarchyPath?: string;
-  formatted?: WorkOrderFormatted;
-}
-
-export interface WorkOrderFormatted extends FormattedFields {
-  id: string;           // BASE-SUB/LOT format
-  status: string;       // Human-readable status
-  type: string;         // Human-readable type
-}
-
-/**
- * Aggregate counts for lazy loading indicators
- */
-export interface WorkOrderCounts {
-  operations: number;
-  laborTickets: number;
-  inventoryTrans: number;
-}
-
-/**
- * Customer order reference
- */
-export interface CustomerOrderRef {
-  orderId?: string;
-  lineNo?: number;
-}
-
-/**
- * Work order header with full details
- * Maps to: Python WorkOrder dataclass (extended)
- */
-export interface WorkOrderHeader extends WorkOrder {
-  quantities: WorkOrderQuantities;
-  priority?: number;
-  customerOrder?: CustomerOrderRef;
-  notes?: string;
-  counts: WorkOrderCounts;
-}
-
-/**
- * Operation/routing step
- * Maps to: Python Operation dataclass
- */
-export interface Operation {
-  sequenceNo: number;
-  resourceId?: string;
-  departmentId: string;
-  departmentName?: string;
-  setupHrs: number;
-  runHrs: number;
-  runType: string;
-  status: string;
-  dates: {
-    actualStart?: Date;
-    actualFinish?: Date;
-  };
-  requirementCount: number;
-  formatted?: OperationFormatted;
-}
-
-export interface OperationFormatted extends FormattedFields {
-  status: string;
-  runType: string;
-}
-
-/**
- * Requirement/BOM item
- * Maps to: Python Requirement dataclass
- */
-export interface Requirement {
-  pieceNo: number;
-  partId: string;
-  partDescription: string;
-  qtyPerPiece: number;
-  fixedQty: number;
-  scrapPercent: number;
-  operationSeqNo: number;
-  subordWoSubId?: string;
-  quantities: {
-    issued: number;
-    allocated: number;
-  };
-  notes?: string;
-  isSubWorkOrder: boolean;
-  subWorkOrder?: WorkOrderId;
-  formatted?: RequirementFormatted;
-}
-
-export interface RequirementFormatted extends FormattedFields {
-  qtyPer: string;
-  scrapPercent?: string;
-}
-
-/**
- * Labor ticket
- * Maps to: Python LaborTicket dataclass
- */
-export interface LaborTicket {
-  employeeId: string;
-  employeeName?: string;
-  laborDate: Date;
-  operationSeqNo: number;
-  hours: {
-    setup: number;
-    run: number;
-  };
-  laborRate: number;
-  costs: {
-    labor: number;
-    burden: number;
-  };
-  quantities: {
-    completed: number;
-    scrapped: number;
-  };
-  formatted?: LaborTicketFormatted;
-}
-
-export interface LaborTicketFormatted extends FormattedFields {
-  laborDate: string;
-  laborCost: string;
-  totalHours: string;
-}
-
-/**
- * Inventory transaction
- * Maps to: Python InventoryTransaction dataclass
- */
-export interface InventoryTransaction {
-  partId: string;
-  partDescription: string;
-  transType: string;
-  quantity: number;
-  transDate: Date;
-  locationId?: string;
-  costs: {
-    unit: number;
-    total: number;
-  };
-  formatted?: InventoryTransFormatted;
-}
-
-export interface InventoryTransFormatted extends FormattedFields {
-  transType: string;
-  transDate: string;
-  totalCost: string;
-}
-
-/**
- * WIP (Work In Progress) balance
- * Maps to: Python WIPBalance dataclass
- */
-export interface WIPBalance {
-  costs: {
-    material: number;
-    labor: number;
-    burden: number;
-    service: number;
-    total: number;
-  };
-  formatted?: WIPBalanceFormatted;
-}
-
-export interface WIPBalanceFormatted extends FormattedFields {
-  materialCost: string;
-  laborCost: string;
-  burdenCost: string;
-  totalCost: string;
-}
-
+```javascript
 /**
  * Work order status codes
  */
-export const WORK_ORDER_STATUS: Record<string, string> = {
+const WORK_ORDER_STATUS = {
   'F': 'Firm Planned',
   'R': 'Released',
   'S': 'Started',
@@ -595,7 +33,7 @@ export const WORK_ORDER_STATUS: Record<string, string> = {
 /**
  * Work order type codes
  */
-export const WORK_ORDER_TYPE: Record<string, string> = {
+const WORK_ORDER_TYPE = {
   'M': 'Make',
   'B': 'Buy',
   'S': 'Stock',
@@ -605,7 +43,7 @@ export const WORK_ORDER_TYPE: Record<string, string> = {
 /**
  * Operation status codes
  */
-export const OPERATION_STATUS: Record<string, string> = {
+const OPERATION_STATUS = {
   'P': 'Pending',
   'R': 'Ready',
   'S': 'Started',
@@ -615,7 +53,7 @@ export const OPERATION_STATUS: Record<string, string> = {
 /**
  * Inventory transaction type codes
  */
-export const INVENTORY_TRANS_TYPE: Record<string, string> = {
+const INVENTORY_TRANS_TYPE = {
   'I': 'Issue',
   'R': 'Return',
   'S': 'Scrap',
@@ -626,71 +64,343 @@ export const INVENTORY_TRANS_TYPE: Record<string, string> = {
 /**
  * Run type codes
  */
-export const RUN_TYPE: Record<string, string> = {
+const RUN_TYPE = {
   'H': 'Hours per piece',
   'P': 'Pieces per hour',
   'L': 'Hours per lot',
 };
-```
 
----
-
-## Index Exports (src/models/index.ts)
-
-```typescript
-// Common models
-export * from './common.model';
-
-// Order models
-export * from './order.model';
-
-// Part models
-export * from './part.model';
-
-// Work order models
-export * from './workorder.model';
-```
-
----
-
-## Utility Functions for Transformation
-
-### Row to Model Transformers (src/utils/transformers.ts)
-
-```typescript
-import {
-  OrderSummary,
-  OrderHeader,
-  OrderLineItem,
-  OrderRow,
-  Customer,
-} from '../models/order.model';
-import {
-  Part,
-  PartRow,
-  WhereUsed,
-  PurchaseHistory,
-} from '../models/part.model';
-import {
-  WorkOrder,
-  WorkOrderHeader,
-  Operation,
-  Requirement,
-  LaborTicket,
-  InventoryTransaction,
-  WIPBalance,
+module.exports = {
   WORK_ORDER_STATUS,
   WORK_ORDER_TYPE,
   OPERATION_STATUS,
   INVENTORY_TRANS_TYPE,
   RUN_TYPE,
-} from '../models/workorder.model';
-import { formatDate, formatCurrency, formatNumber } from './formatters';
+};
+```
+
+---
+
+## JSDoc Type Definitions
+
+These JSDoc comments provide type information for IDE support and documentation.
+
+### Common Types
+
+```javascript
+/**
+ * @typedef {Object} ApiResponse
+ * @property {boolean} success - Whether the request succeeded
+ * @property {*} [data] - Response data
+ * @property {ApiError} [error] - Error information
+ * @property {ResponseMeta} [meta] - Response metadata
+ */
+
+/**
+ * @typedef {Object} ApiError
+ * @property {string} code - Error code
+ * @property {string} message - Error message
+ * @property {Object} [details] - Additional error details
+ */
+
+/**
+ * @typedef {Object} ResponseMeta
+ * @property {string} timestamp - ISO timestamp
+ * @property {number} [count] - Number of results
+ * @property {Object} [filters] - Applied filters
+ */
+
+/**
+ * @typedef {Object} Address
+ * @property {string} [address1]
+ * @property {string} [address2]
+ * @property {string} [city]
+ * @property {string} [state]
+ * @property {string} [zip]
+ * @property {string} [country]
+ */
+```
+
+### Order Types
+
+```javascript
+/**
+ * @typedef {Object} OrderSummary
+ * @property {string} jobNumber
+ * @property {string} customerName
+ * @property {Date} orderDate
+ * @property {number} totalAmount
+ * @property {string} [customerPO]
+ * @property {Object} [formatted] - Formatted display values
+ * @property {string} [formatted.orderDate]
+ * @property {string} [formatted.totalAmount]
+ */
+
+/**
+ * @typedef {Object} CustomerContact
+ * @property {string} [name]
+ * @property {string} [phone]
+ * @property {string} [fax]
+ * @property {string} [email]
+ */
+
+/**
+ * @typedef {Object} Customer
+ * @property {string} id
+ * @property {string} name
+ * @property {Address} shipping
+ * @property {Address} billing
+ * @property {CustomerContact} contact
+ */
+
+/**
+ * @typedef {Object} OrderLineItem
+ * @property {number} lineNumber
+ * @property {string} partId
+ * @property {string} [partDescription]
+ * @property {number} orderQty
+ * @property {number} unitPrice
+ * @property {number} lineTotal
+ * @property {Date} [desiredShipDate]
+ * @property {Date} [promisedShipDate]
+ * @property {string} [baseId]
+ * @property {string} [lotId]
+ * @property {string} [binaryDetails]
+ * @property {Object} [formatted]
+ */
+
+/**
+ * @typedef {Object} OrderHeader
+ * @property {string} jobNumber
+ * @property {Date} orderDate
+ * @property {number} totalAmount
+ * @property {string} [customerPO]
+ * @property {Date} [desiredShipDate]
+ * @property {Date} [promisedDate]
+ * @property {string[]} [notes]
+ * @property {Customer} customer
+ * @property {OrderLineItem[]} [lineItems]
+ * @property {Object} [formatted]
+ */
+```
+
+### Part Types
+
+```javascript
+/**
+ * @typedef {Object} PartCosts
+ * @property {number} material
+ * @property {number} labor
+ * @property {number} burden
+ * @property {number} service
+ * @property {number} standard
+ * @property {number} last
+ * @property {number} average
+ */
+
+/**
+ * @typedef {Object} PartQuantities
+ * @property {number} onHand
+ * @property {number} onOrder
+ * @property {number} allocated
+ * @property {number} available
+ */
+
+/**
+ * @typedef {Object} PartFlags
+ * @property {boolean} purchased
+ * @property {boolean} fabricated
+ * @property {boolean} stocked
+ */
+
+/**
+ * @typedef {Object} Part
+ * @property {string} partId
+ * @property {string} description
+ * @property {string} stockUm
+ * @property {PartCosts} costs
+ * @property {PartQuantities} quantities
+ * @property {PartFlags} flags
+ * @property {string} [vendorName]
+ * @property {Object} [formatted]
+ */
+
+/**
+ * @typedef {Object} WorkOrderId
+ * @property {string} baseId
+ * @property {string} lotId
+ * @property {string} subId
+ */
+
+/**
+ * @typedef {Object} WhereUsed
+ * @property {WorkOrderId} workOrderId
+ * @property {string} parentPartId
+ * @property {string} parentDescription
+ * @property {string} workOrderStatus
+ * @property {number} qtyPer
+ * @property {number} fixedQty
+ * @property {Object} [formatted]
+ */
+
+/**
+ * @typedef {Object} PurchaseHistory
+ * @property {string} purchaseOrderId
+ * @property {number} lineNumber
+ * @property {string} vendorName
+ * @property {number} orderQty
+ * @property {number} unitPrice
+ * @property {Date} [desiredReceiveDate]
+ * @property {number} receivedQty
+ * @property {Date} [lastReceiveDate]
+ * @property {Object} [formatted]
+ */
+```
+
+### Work Order Types
+
+```javascript
+/**
+ * @typedef {Object} WorkOrderDates
+ * @property {Date} [desiredStart]
+ * @property {Date} [desiredCompl]
+ * @property {Date} [actualStart]
+ * @property {Date} [actualCompl]
+ */
+
+/**
+ * @typedef {Object} WorkOrderQuantities
+ * @property {number} ordered
+ * @property {number} completed
+ * @property {number} scrapped
+ */
+
+/**
+ * @typedef {Object} WorkOrder
+ * @property {WorkOrderId} id
+ * @property {string} partId
+ * @property {string} partDescription
+ * @property {number} orderQty
+ * @property {string} status
+ * @property {string} type
+ * @property {WorkOrderDates} dates
+ * @property {number} [hierarchyLevel]
+ * @property {string} [hierarchyPath]
+ * @property {Object} [formatted]
+ */
+
+/**
+ * @typedef {Object} WorkOrderCounts
+ * @property {number} operations
+ * @property {number} laborTickets
+ * @property {number} inventoryTrans
+ */
+
+/**
+ * @typedef {Object} WorkOrderHeader
+ * @property {WorkOrderId} id
+ * @property {string} partId
+ * @property {string} partDescription
+ * @property {WorkOrderQuantities} quantities
+ * @property {string} status
+ * @property {string} type
+ * @property {number} [priority]
+ * @property {WorkOrderDates} dates
+ * @property {Object} [customerOrder]
+ * @property {string} [notes]
+ * @property {WorkOrderCounts} counts
+ * @property {Object} [formatted]
+ */
+
+/**
+ * @typedef {Object} Operation
+ * @property {number} sequenceNo
+ * @property {string} [resourceId]
+ * @property {string} departmentId
+ * @property {string} [departmentName]
+ * @property {number} setupHrs
+ * @property {number} runHrs
+ * @property {string} runType
+ * @property {string} status
+ * @property {Object} dates
+ * @property {number} requirementCount
+ * @property {Object} [formatted]
+ */
+
+/**
+ * @typedef {Object} Requirement
+ * @property {number} pieceNo
+ * @property {string} partId
+ * @property {string} partDescription
+ * @property {number} qtyPerPiece
+ * @property {number} fixedQty
+ * @property {number} scrapPercent
+ * @property {number} operationSeqNo
+ * @property {string} [subordWoSubId]
+ * @property {Object} quantities
+ * @property {string} [notes]
+ * @property {boolean} isSubWorkOrder
+ * @property {WorkOrderId} [subWorkOrder]
+ * @property {Object} [formatted]
+ */
+
+/**
+ * @typedef {Object} LaborTicket
+ * @property {string} employeeId
+ * @property {string} [employeeName]
+ * @property {Date} laborDate
+ * @property {number} operationSeqNo
+ * @property {Object} hours
+ * @property {number} laborRate
+ * @property {Object} costs
+ * @property {Object} quantities
+ * @property {Object} [formatted]
+ */
+
+/**
+ * @typedef {Object} InventoryTransaction
+ * @property {string} partId
+ * @property {string} partDescription
+ * @property {string} transType
+ * @property {number} quantity
+ * @property {Date} transDate
+ * @property {string} [locationId]
+ * @property {Object} costs
+ * @property {Object} [formatted]
+ */
+
+/**
+ * @typedef {Object} WIPBalance
+ * @property {Object} costs
+ * @property {number} costs.material
+ * @property {number} costs.labor
+ * @property {number} costs.burden
+ * @property {number} costs.service
+ * @property {number} costs.total
+ * @property {Object} [formatted]
+ */
+```
+
+---
+
+## Transformers (src/models/transformers.js)
+
+```javascript
+const { formatDate, formatCurrency, formatNumber } = require('../utils/formatters');
+const {
+  WORK_ORDER_STATUS,
+  WORK_ORDER_TYPE,
+  OPERATION_STATUS,
+  INVENTORY_TRANS_TYPE,
+  RUN_TYPE,
+} = require('./constants');
 
 /**
  * Transform database row to OrderSummary
+ * @param {Object} row - Database row
+ * @returns {OrderSummary}
  */
-export function toOrderSummary(row: any): OrderSummary {
+function toOrderSummary(row) {
   return {
     jobNumber: row.jobNumber,
     customerName: row.customerName,
@@ -706,9 +416,11 @@ export function toOrderSummary(row: any): OrderSummary {
 
 /**
  * Transform database row to OrderHeader
+ * @param {Object} row - Database row
+ * @returns {OrderHeader}
  */
-export function toOrderHeader(row: OrderRow): OrderHeader {
-  const customer: Customer = {
+function toOrderHeader(row) {
+  const customer = {
     id: row.customerId,
     name: row.customerName,
     shipping: {
@@ -736,7 +448,7 @@ export function toOrderHeader(row: OrderRow): OrderHeader {
     },
   };
 
-  const notes: string[] = [];
+  const notes = [];
   if (row.note1) notes.push(row.note1);
   if (row.note2) notes.push(row.note2);
 
@@ -759,9 +471,37 @@ export function toOrderHeader(row: OrderRow): OrderHeader {
 }
 
 /**
- * Transform database row to Part
+ * Transform database row to OrderLineItem
+ * @param {Object} row - Database row
+ * @returns {OrderLineItem}
  */
-export function toPart(row: PartRow): Part {
+function toOrderLineItem(row) {
+  return {
+    lineNumber: row.lineNumber,
+    partId: row.partId,
+    partDescription: row.partDescription,
+    orderQty: row.orderQty,
+    unitPrice: row.unitPrice,
+    lineTotal: row.lineTotal,
+    desiredShipDate: row.desiredShipDate ? new Date(row.desiredShipDate) : undefined,
+    promisedShipDate: row.promisedShipDate ? new Date(row.promisedShipDate) : undefined,
+    baseId: row.baseId || undefined,
+    lotId: row.lotId || undefined,
+    binaryDetails: row.binaryDetails || undefined,
+    formatted: {
+      unitPrice: formatCurrency(row.unitPrice),
+      lineTotal: formatCurrency(row.lineTotal),
+      desiredShipDate: row.desiredShipDate ? formatDate(row.desiredShipDate) : undefined,
+    },
+  };
+}
+
+/**
+ * Transform database row to Part
+ * @param {Object} row - Database row
+ * @returns {Part}
+ */
+function toPart(row) {
   return {
     partId: row.partId,
     description: row.description,
@@ -795,9 +535,57 @@ export function toPart(row: PartRow): Part {
 }
 
 /**
- * Transform database row to WorkOrder
+ * Transform database row to WhereUsed
+ * @param {Object} row - Database row
+ * @returns {WhereUsed}
  */
-export function toWorkOrder(row: any): WorkOrder {
+function toWhereUsed(row) {
+  return {
+    workOrderId: {
+      baseId: row.workOrderBaseId,
+      lotId: row.workOrderLotId,
+      subId: row.workOrderSubId,
+    },
+    parentPartId: row.parentPartId,
+    parentDescription: row.parentDescription,
+    workOrderStatus: row.workOrderStatus,
+    qtyPer: row.qtyPer,
+    fixedQty: row.fixedQty,
+    formatted: {
+      workOrderId: formatWorkOrderId(row.workOrderBaseId, row.workOrderSubId, row.workOrderLotId),
+      status: WORK_ORDER_STATUS[row.workOrderStatus] || row.workOrderStatus,
+    },
+  };
+}
+
+/**
+ * Transform database row to PurchaseHistory
+ * @param {Object} row - Database row
+ * @returns {PurchaseHistory}
+ */
+function toPurchaseHistory(row) {
+  return {
+    purchaseOrderId: row.purchaseOrderId,
+    lineNumber: row.lineNumber,
+    vendorName: row.vendorName,
+    orderQty: row.orderQty,
+    unitPrice: row.unitPrice,
+    desiredReceiveDate: row.desiredReceiveDate ? new Date(row.desiredReceiveDate) : undefined,
+    receivedQty: row.receivedQty,
+    lastReceiveDate: row.lastReceiveDate ? new Date(row.lastReceiveDate) : undefined,
+    formatted: {
+      unitPrice: formatCurrency(row.unitPrice),
+      desiredReceiveDate: row.desiredReceiveDate ? formatDate(row.desiredReceiveDate) : undefined,
+    },
+  };
+}
+
+/**
+ * Transform database row to WorkOrder
+ * @param {Object} row - Database row
+ * @returns {WorkOrder}
+ */
+function toWorkOrder(row) {
   return {
     id: {
       baseId: row.baseId,
@@ -827,8 +615,10 @@ export function toWorkOrder(row: any): WorkOrder {
 
 /**
  * Transform database row to WorkOrderHeader
+ * @param {Object} row - Database row
+ * @returns {WorkOrderHeader}
  */
-export function toWorkOrderHeader(row: any): WorkOrderHeader {
+function toWorkOrderHeader(row) {
   const base = toWorkOrder(row);
   return {
     ...base,
@@ -851,22 +641,187 @@ export function toWorkOrderHeader(row: any): WorkOrderHeader {
 }
 
 /**
- * Format work order ID as BASE-SUB/LOT
+ * Transform database row to Operation
+ * @param {Object} row - Database row
+ * @returns {Operation}
  */
-export function formatWorkOrderId(baseId: string, subId: string, lotId: string): string {
+function toOperation(row) {
+  return {
+    sequenceNo: row.sequenceNo,
+    resourceId: row.resourceId || undefined,
+    departmentId: row.departmentId,
+    departmentName: row.departmentName || undefined,
+    setupHrs: row.setupHrs,
+    runHrs: row.runHrs,
+    runType: row.runType,
+    status: row.status,
+    dates: {
+      actualStart: row.actualStartDate ? new Date(row.actualStartDate) : undefined,
+      actualFinish: row.actualFinishDate ? new Date(row.actualFinishDate) : undefined,
+    },
+    requirementCount: row.requirementCount,
+    formatted: {
+      status: OPERATION_STATUS[row.status] || row.status,
+      runType: RUN_TYPE[row.runType] || row.runType,
+    },
+  };
+}
+
+/**
+ * Transform database row to Requirement
+ * @param {Object} row - Database row
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @returns {Requirement}
+ */
+function toRequirement(row, baseId, lotId) {
+  const isSubWorkOrder = row.subordWoSubId !== null && row.subordWoSubId !== '';
+
+  return {
+    pieceNo: row.pieceNo,
+    partId: row.partId,
+    partDescription: row.partDescription,
+    qtyPerPiece: row.qtyPerPiece,
+    fixedQty: row.fixedQty,
+    scrapPercent: row.scrapPercent,
+    operationSeqNo: row.operationSeqNo,
+    subordWoSubId: row.subordWoSubId || undefined,
+    quantities: {
+      issued: row.qtyIssued,
+      allocated: row.qtyAllocated,
+    },
+    notes: row.notes || undefined,
+    isSubWorkOrder,
+    subWorkOrder: isSubWorkOrder
+      ? { baseId, lotId, subId: row.subordWoSubId }
+      : undefined,
+    formatted: {
+      qtyPer: `${formatNumber(row.qtyPerPiece, 2)} per piece`,
+      scrapPercent: row.scrapPercent > 0 ? `${formatNumber(row.scrapPercent, 1)}%` : undefined,
+    },
+  };
+}
+
+/**
+ * Transform database row to LaborTicket
+ * @param {Object} row - Database row
+ * @returns {LaborTicket}
+ */
+function toLaborTicket(row) {
+  return {
+    employeeId: row.employeeId,
+    employeeName: row.employeeName || undefined,
+    laborDate: new Date(row.laborDate),
+    operationSeqNo: row.operationSeqNo,
+    hours: {
+      setup: row.setupHrs,
+      run: row.runHrs,
+    },
+    laborRate: row.laborRate,
+    costs: {
+      labor: row.totalLaborCost,
+      burden: row.burdenCost,
+    },
+    quantities: {
+      completed: row.qtyCompleted,
+      scrapped: row.qtyScrapped,
+    },
+    formatted: {
+      laborDate: formatDate(row.laborDate),
+      laborCost: formatCurrency(row.totalLaborCost),
+      totalHours: `${formatNumber(row.setupHrs + row.runHrs, 1)} hrs`,
+    },
+  };
+}
+
+/**
+ * Transform database row to InventoryTransaction
+ * @param {Object} row - Database row
+ * @returns {InventoryTransaction}
+ */
+function toInventoryTransaction(row) {
+  return {
+    partId: row.partId,
+    partDescription: row.partDescription,
+    transType: row.transType,
+    quantity: row.quantity,
+    transDate: new Date(row.transDate),
+    locationId: row.locationId || undefined,
+    costs: {
+      unit: row.unitCost,
+      total: row.totalCost,
+    },
+    formatted: {
+      transType: INVENTORY_TRANS_TYPE[row.transType] || row.transType,
+      transDate: formatDate(row.transDate),
+      totalCost: formatCurrency(row.totalCost),
+    },
+  };
+}
+
+/**
+ * Transform database row to WIPBalance
+ * @param {Object} row - Database row
+ * @returns {WIPBalance}
+ */
+function toWIPBalance(row) {
+  return {
+    costs: {
+      material: row.materialCost,
+      labor: row.laborCost,
+      burden: row.burdenCost,
+      service: row.serviceCost,
+      total: row.totalCost,
+    },
+    formatted: {
+      materialCost: formatCurrency(row.materialCost),
+      laborCost: formatCurrency(row.laborCost),
+      burdenCost: formatCurrency(row.burdenCost),
+      totalCost: formatCurrency(row.totalCost),
+    },
+  };
+}
+
+/**
+ * Format work order ID as BASE-SUB/LOT
+ * @param {string} baseId
+ * @param {string} subId
+ * @param {string} lotId
+ * @returns {string}
+ */
+function formatWorkOrderId(baseId, subId, lotId) {
   return `${baseId}-${subId}/${lotId}`;
 }
+
+module.exports = {
+  toOrderSummary,
+  toOrderHeader,
+  toOrderLineItem,
+  toPart,
+  toWhereUsed,
+  toPurchaseHistory,
+  toWorkOrder,
+  toWorkOrderHeader,
+  toOperation,
+  toRequirement,
+  toLaborTicket,
+  toInventoryTransaction,
+  toWIPBalance,
+  formatWorkOrderId,
+};
 ```
 
 ---
 
-## Formatters (src/utils/formatters.ts)
+## Formatters (src/utils/formatters.js)
 
-```typescript
+```javascript
 /**
  * Format date as MM/DD/YYYY
+ * @param {Date|string|null|undefined} date
+ * @returns {string}
  */
-export function formatDate(date: Date | string | null | undefined): string {
+function formatDate(date) {
   if (!date) return '';
   const d = date instanceof Date ? date : new Date(date);
   if (isNaN(d.getTime())) return '';
@@ -880,8 +835,10 @@ export function formatDate(date: Date | string | null | undefined): string {
 
 /**
  * Format number as currency ($X,XXX.XX)
+ * @param {number|null|undefined} value
+ * @returns {string}
  */
-export function formatCurrency(value: number | null | undefined): string {
+function formatCurrency(value) {
   if (value === null || value === undefined) return '';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -891,8 +848,11 @@ export function formatCurrency(value: number | null | undefined): string {
 
 /**
  * Format number with thousand separators
+ * @param {number|null|undefined} value
+ * @param {number} decimals
+ * @returns {string}
  */
-export function formatNumber(value: number | null | undefined, decimals: number = 0): string {
+function formatNumber(value, decimals = 0) {
   if (value === null || value === undefined) return '';
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: decimals,
@@ -902,17 +862,43 @@ export function formatNumber(value: number | null | undefined, decimals: number 
 
 /**
  * Format percentage
+ * @param {number|null|undefined} value
+ * @returns {string}
  */
-export function formatPercent(value: number | null | undefined): string {
+function formatPercent(value) {
   if (value === null || value === undefined) return '';
   return `${formatNumber(value, 1)}%`;
 }
 
 /**
  * Format hours
+ * @param {number|null|undefined} value
+ * @returns {string}
  */
-export function formatHours(value: number | null | undefined): string {
+function formatHours(value) {
   if (value === null || value === undefined) return '';
   return `${formatNumber(value, 1)} hrs`;
 }
+
+module.exports = {
+  formatDate,
+  formatCurrency,
+  formatNumber,
+  formatPercent,
+  formatHours,
+};
+```
+
+---
+
+## Index Exports (src/models/index.js)
+
+```javascript
+const constants = require('./constants');
+const transformers = require('./transformers');
+
+module.exports = {
+  ...constants,
+  ...transformers,
+};
 ```

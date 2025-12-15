@@ -6,15 +6,15 @@ The database layer handles all communication with the Visual/SAMCO SQL Server da
 
 ## SQL Server Connection
 
-### Connection Pool Configuration (src/database/connection.ts)
+### Connection Pool Configuration (src/database/connection.js)
 
-```typescript
-import sql from 'mssql';
-import { config } from '../config';
-import { logger } from '../utils/logger';
+```javascript
+const sql = require('mssql');
+const config = require('../config');
+const logger = require('../utils/logger');
 
 // Connection pool configuration
-const poolConfig: sql.config = {
+const poolConfig = {
   server: config.db.server,
   port: config.db.port,
   database: config.db.database,
@@ -34,12 +34,15 @@ const poolConfig: sql.config = {
   requestTimeout: 30000,     // 30 seconds
 };
 
-let pool: sql.ConnectionPool | null = null;
+let pool = null;
 
 /**
  * Initialize database connection pool with retry logic
+ * @param {number} retries - Number of retry attempts
+ * @param {number} delay - Delay between retries in ms
+ * @returns {Promise<sql.ConnectionPool>}
  */
-export async function connectDatabase(retries = 3, delay = 2000): Promise<sql.ConnectionPool> {
+async function connectDatabase(retries = 3, delay = 2000) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       pool = await new sql.ConnectionPool(poolConfig).connect();
@@ -66,8 +69,9 @@ export async function connectDatabase(retries = 3, delay = 2000): Promise<sql.Co
 
 /**
  * Get the active connection pool
+ * @returns {sql.ConnectionPool}
  */
-export function getPool(): sql.ConnectionPool {
+function getPool() {
   if (!pool) {
     throw new Error('Database pool not initialized. Call connectDatabase() first.');
   }
@@ -76,8 +80,9 @@ export function getPool(): sql.ConnectionPool {
 
 /**
  * Close the connection pool gracefully
+ * @returns {Promise<void>}
  */
-export async function closeDatabase(): Promise<void> {
+async function closeDatabase() {
   if (pool) {
     await pool.close();
     pool = null;
@@ -87,34 +92,41 @@ export async function closeDatabase(): Promise<void> {
 
 /**
  * Execute a query with automatic connection handling
+ * @param {string} query - SQL query string
+ * @param {Object} params - Query parameters
+ * @returns {Promise<Array>}
  */
-export async function executeQuery<T>(
-  query: string,
-  params?: Record<string, unknown>
-): Promise<T[]> {
+async function executeQuery(query, params = {}) {
   const request = getPool().request();
 
   // Add parameters if provided
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
-      request.input(key, value);
-    }
+  for (const [key, value] of Object.entries(params)) {
+    request.input(key, value);
   }
 
   const result = await request.query(query);
-  return result.recordset as T[];
+  return result.recordset;
 }
 
 /**
  * Execute a query and return single result
+ * @param {string} query - SQL query string
+ * @param {Object} params - Query parameters
+ * @returns {Promise<Object|null>}
  */
-export async function executeQuerySingle<T>(
-  query: string,
-  params?: Record<string, unknown>
-): Promise<T | null> {
-  const results = await executeQuery<T>(query, params);
+async function executeQuerySingle(query, params = {}) {
+  const results = await executeQuery(query, params);
   return results[0] || null;
 }
+
+module.exports = {
+  connectDatabase,
+  getPool,
+  closeDatabase,
+  executeQuery,
+  executeQuerySingle,
+  sql,
+};
 ```
 
 ## Key Database Tables
@@ -151,17 +163,17 @@ export async function executeQuerySingle<T>(
 
 ## Query Files
 
-### Order Queries (src/database/queries/order.queries.ts)
+### Order Queries (src/database/queries/order.queries.js)
 
-```typescript
-import sql from 'mssql';
-import { getPool } from '../connection';
-import { OrderSummary, OrderHeader, OrderLineItem, Customer } from '../../models/order.model';
+```javascript
+const { getPool, sql } = require('../connection');
 
 /**
  * Get recent orders with customer info
+ * @param {number} limit - Maximum number of orders to return
+ * @returns {Promise<Array>}
  */
-export async function getRecentOrders(limit: number = 100): Promise<OrderSummary[]> {
+async function getRecentOrders(limit = 100) {
   const query = `
     SELECT TOP (@limit)
       co.ID AS jobNumber,
@@ -184,12 +196,12 @@ export async function getRecentOrders(limit: number = 100): Promise<OrderSummary
 
 /**
  * Search orders by date range
+ * @param {Date} startDate - Start date filter
+ * @param {Date} endDate - End date filter
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
  */
-export async function getOrdersByDateRange(
-  startDate?: Date,
-  endDate?: Date,
-  limit: number = 100
-): Promise<OrderSummary[]> {
+async function getOrdersByDateRange(startDate, endDate, limit = 100) {
   let query = `
     SELECT TOP (@limit)
       co.ID AS jobNumber,
@@ -222,8 +234,10 @@ export async function getOrdersByDateRange(
 
 /**
  * Get order by job number
+ * @param {string} jobNumber - The job number to find
+ * @returns {Promise<Object|null>}
  */
-export async function getOrderByJobNumber(jobNumber: string): Promise<OrderHeader | null> {
+async function getOrderByJobNumber(jobNumber) {
   const query = `
     SELECT
       co.ID AS jobNumber,
@@ -266,17 +280,15 @@ export async function getOrderByJobNumber(jobNumber: string): Promise<OrderHeade
     .input('jobNumber', sql.VarChar, jobNumber)
     .query(query);
 
-  if (result.recordset.length === 0) {
-    return null;
-  }
-
-  return result.recordset[0];
+  return result.recordset[0] || null;
 }
 
 /**
  * Get order line items
+ * @param {string} jobNumber - The job number
+ * @returns {Promise<Array>}
  */
-export async function getOrderLineItems(jobNumber: string): Promise<OrderLineItem[]> {
+async function getOrderLineItems(jobNumber) {
   const query = `
     SELECT
       col.LINE_NO AS lineNumber,
@@ -310,13 +322,13 @@ export async function getOrderLineItems(jobNumber: string): Promise<OrderLineIte
 
 /**
  * Search orders by customer name
+ * @param {string} customerName - Customer name pattern
+ * @param {Date} startDate - Optional start date
+ * @param {Date} endDate - Optional end date
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
  */
-export async function searchByCustomerName(
-  customerName: string,
-  startDate?: Date,
-  endDate?: Date,
-  limit: number = 100
-): Promise<OrderSummary[]> {
+async function searchByCustomerName(customerName, startDate, endDate, limit = 100) {
   let query = `
     SELECT TOP (@limit)
       co.ID AS jobNumber,
@@ -349,19 +361,27 @@ export async function searchByCustomerName(
   const result = await request.query(query);
   return result.recordset;
 }
+
+module.exports = {
+  getRecentOrders,
+  getOrdersByDateRange,
+  getOrderByJobNumber,
+  getOrderLineItems,
+  searchByCustomerName,
+};
 ```
 
-### Part Queries (src/database/queries/part.queries.ts)
+### Part Queries (src/database/queries/part.queries.js)
 
-```typescript
-import sql from 'mssql';
-import { getPool } from '../connection';
-import { Part, WhereUsed, PurchaseHistory } from '../../models/part.model';
+```javascript
+const { getPool, sql } = require('../connection');
 
 /**
  * Get part by part number
+ * @param {string} partNumber - The part ID
+ * @returns {Promise<Object|null>}
  */
-export async function getPartByNumber(partNumber: string): Promise<Part | null> {
+async function getPartByNumber(partNumber) {
   const query = `
     SELECT
       p.ID AS partId,
@@ -397,11 +417,11 @@ export async function getPartByNumber(partNumber: string): Promise<Part | null> 
 
 /**
  * Search parts by partial number
+ * @param {string} searchPattern - Search pattern
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
  */
-export async function searchParts(
-  searchPattern: string,
-  limit: number = 100
-): Promise<Part[]> {
+async function searchParts(searchPattern, limit = 100) {
   const query = `
     SELECT TOP (@limit)
       p.ID AS partId,
@@ -426,8 +446,11 @@ export async function searchParts(
 
 /**
  * Get where-used information for a part
+ * @param {string} partNumber - The part ID
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
  */
-export async function getWhereUsed(partNumber: string, limit: number = 100): Promise<WhereUsed[]> {
+async function getWhereUsed(partNumber, limit = 100) {
   const query = `
     SELECT TOP (@limit)
       r.WORKORDER_BASE_ID AS workOrderBaseId,
@@ -459,11 +482,11 @@ export async function getWhereUsed(partNumber: string, limit: number = 100): Pro
 
 /**
  * Get purchase history for a part
+ * @param {string} partNumber - The part ID
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
  */
-export async function getPurchaseHistory(
-  partNumber: string,
-  limit: number = 100
-): Promise<PurchaseHistory[]> {
+async function getPurchaseHistory(partNumber, limit = 100) {
   const query = `
     SELECT TOP (@limit)
       pol.PURC_ORDER_ID AS purchaseOrderId,
@@ -489,30 +512,27 @@ export async function getPurchaseHistory(
 
   return result.recordset;
 }
+
+module.exports = {
+  getPartByNumber,
+  searchParts,
+  getWhereUsed,
+  getPurchaseHistory,
+};
 ```
 
-### Work Order Queries (src/database/queries/workorder.queries.ts)
+### Work Order Queries (src/database/queries/workorder.queries.js)
 
-```typescript
-import sql from 'mssql';
-import { getPool } from '../connection';
-import {
-  WorkOrder,
-  WorkOrderHeader,
-  Operation,
-  Requirement,
-  LaborTicket,
-  InventoryTransaction,
-  WIPBalance,
-} from '../../models/workorder.model';
+```javascript
+const { getPool, sql } = require('../connection');
 
 /**
  * Search work orders by base ID pattern
+ * @param {string} baseIdPattern - Base ID search pattern
+ * @param {number} limit - Maximum results
+ * @returns {Promise<Array>}
  */
-export async function searchWorkOrders(
-  baseIdPattern: string,
-  limit: number = 100
-): Promise<WorkOrder[]> {
+async function searchWorkOrders(baseIdPattern, limit = 100) {
   const query = `
     SELECT TOP (@limit)
       wo.BASE_ID AS baseId,
@@ -544,12 +564,12 @@ export async function searchWorkOrders(
 
 /**
  * Get work order header with aggregate counts for lazy loading
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Object|null>}
  */
-export async function getWorkOrderHeader(
-  baseId: string,
-  lotId: string,
-  subId: string
-): Promise<WorkOrderHeader | null> {
+async function getWorkOrderHeader(baseId, lotId, subId) {
   const query = `
     SELECT
       wo.BASE_ID AS baseId,
@@ -606,12 +626,12 @@ export async function getWorkOrderHeader(
 
 /**
  * Get operations for a work order
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Array>}
  */
-export async function getOperations(
-  baseId: string,
-  lotId: string,
-  subId: string
-): Promise<Operation[]> {
+async function getOperations(baseId, lotId, subId) {
   const query = `
     SELECT
       o.SEQUENCE_NO AS sequenceNo,
@@ -650,13 +670,13 @@ export async function getOperations(
 
 /**
  * Get requirements for an operation
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @param {number} operationSeqNo - Optional operation sequence filter
+ * @returns {Promise<Array>}
  */
-export async function getRequirements(
-  baseId: string,
-  lotId: string,
-  subId: string,
-  operationSeqNo?: number
-): Promise<Requirement[]> {
+async function getRequirements(baseId, lotId, subId, operationSeqNo) {
   let query = `
     SELECT
       r.PIECE_NO AS pieceNo,
@@ -701,12 +721,12 @@ export async function getRequirements(
 
 /**
  * Get labor tickets for a work order
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Array>}
  */
-export async function getLaborTickets(
-  baseId: string,
-  lotId: string,
-  subId: string
-): Promise<LaborTicket[]> {
+async function getLaborTickets(baseId, lotId, subId) {
   const query = `
     SELECT
       lt.EMPLOYEE_ID AS employeeId,
@@ -740,12 +760,12 @@ export async function getLaborTickets(
 
 /**
  * Get inventory transactions for a work order
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Array>}
  */
-export async function getInventoryTransactions(
-  baseId: string,
-  lotId: string,
-  subId: string
-): Promise<InventoryTransaction[]> {
+async function getInventoryTransactions(baseId, lotId, subId) {
   const query = `
     SELECT
       it.PART_ID AS partId,
@@ -776,12 +796,12 @@ export async function getInventoryTransactions(
 
 /**
  * Get WIP balance for a work order
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Object|null>}
  */
-export async function getWIPBalance(
-  baseId: string,
-  lotId: string,
-  subId: string
-): Promise<WIPBalance | null> {
+async function getWIPBalance(baseId, lotId, subId) {
   const query = `
     SELECT
       wb.MATERIAL_COST AS materialCost,
@@ -807,13 +827,12 @@ export async function getWIPBalance(
 
 /**
  * Get work order hierarchy using recursive CTE
- * Returns parent and all child work orders
+ * @param {string} baseId - Work order base ID
+ * @param {string} lotId - Work order lot ID
+ * @param {string} subId - Work order sub ID
+ * @returns {Promise<Array>}
  */
-export async function getWorkOrderHierarchy(
-  baseId: string,
-  lotId: string,
-  subId: string
-): Promise<WorkOrder[]> {
+async function getWorkOrderHierarchy(baseId, lotId, subId) {
   const query = `
     WITH work_order_hierarchy AS (
       -- Base case: root work order
@@ -881,6 +900,17 @@ export async function getWorkOrderHierarchy(
 
   return result.recordset;
 }
+
+module.exports = {
+  searchWorkOrders,
+  getWorkOrderHeader,
+  getOperations,
+  getRequirements,
+  getLaborTickets,
+  getInventoryTransactions,
+  getWIPBalance,
+  getWorkOrderHierarchy,
+};
 ```
 
 ## Query Patterns
@@ -890,13 +920,13 @@ All queries use `WITH (NOLOCK)` since this is a read-only application. This avoi
 
 ### Pattern 2: Parameterized Queries
 All user inputs are parameterized to prevent SQL injection:
-```typescript
+```javascript
 request.input('partNumber', sql.VarChar, partNumber);
 ```
 
 ### Pattern 3: Dynamic WHERE Clauses
 For optional filters, build queries dynamically:
-```typescript
+```javascript
 let query = 'SELECT ... WHERE 1=1';
 if (startDate) {
   query += ' AND ORDER_DATE >= @startDate';

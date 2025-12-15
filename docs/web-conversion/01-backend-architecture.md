@@ -5,49 +5,47 @@
 ```
 server/
 ├── src/
-│   ├── index.ts                    # Application entry point
-│   ├── app.ts                      # Express app configuration
+│   ├── index.js                    # Application entry point
+│   ├── app.js                      # Express app configuration
 │   ├── config/
-│   │   ├── index.ts                # Configuration loader
-│   │   └── database.ts             # Database configuration
+│   │   ├── index.js                # Configuration loader
+│   │   └── database.js             # Database configuration
 │   ├── database/
-│   │   ├── connection.ts           # SQL Server connection pool
+│   │   ├── connection.js           # SQL Server connection pool
 │   │   ├── queries/
-│   │   │   ├── order.queries.ts    # Order-related SQL queries
-│   │   │   ├── part.queries.ts     # Part-related SQL queries
-│   │   │   └── workorder.queries.ts # Work order SQL queries
-│   │   └── index.ts                # Database exports
+│   │   │   ├── order.queries.js    # Order-related SQL queries
+│   │   │   ├── part.queries.js     # Part-related SQL queries
+│   │   │   └── workorder.queries.js # Work order SQL queries
+│   │   └── index.js                # Database exports
 │   ├── models/
-│   │   ├── order.model.ts          # Order DTOs/interfaces
-│   │   ├── part.model.ts           # Part DTOs/interfaces
-│   │   ├── workorder.model.ts      # Work order DTOs/interfaces
-│   │   └── index.ts                # Model exports
+│   │   ├── order.model.js          # Order data structures
+│   │   ├── part.model.js           # Part data structures
+│   │   ├── workorder.model.js      # Work order data structures
+│   │   └── index.js                # Model exports
 │   ├── services/
-│   │   ├── order.service.ts        # Order business logic
-│   │   ├── part.service.ts         # Part business logic
-│   │   ├── workorder.service.ts    # Work order business logic
-│   │   ├── bom.service.ts          # BOM hierarchy logic
-│   │   └── index.ts                # Service exports
+│   │   ├── order.service.js        # Order business logic
+│   │   ├── part.service.js         # Part business logic
+│   │   ├── workorder.service.js    # Work order business logic
+│   │   ├── bom.service.js          # BOM hierarchy logic
+│   │   └── index.js                # Service exports
 │   ├── controllers/
-│   │   ├── order.controller.ts     # Order route handlers
-│   │   ├── part.controller.ts      # Part route handlers
-│   │   ├── workorder.controller.ts # Work order route handlers
-│   │   └── index.ts                # Controller exports
+│   │   ├── order.controller.js     # Order route handlers
+│   │   ├── part.controller.js      # Part route handlers
+│   │   ├── workorder.controller.js # Work order route handlers
+│   │   └── index.js                # Controller exports
 │   ├── routes/
-│   │   ├── order.routes.ts         # /api/v1/orders routes
-│   │   ├── part.routes.ts          # /api/v1/parts routes
-│   │   ├── workorder.routes.ts     # /api/v1/workorders routes
-│   │   └── index.ts                # Route aggregation
+│   │   ├── order.routes.js         # /api/v1/orders routes
+│   │   ├── part.routes.js          # /api/v1/parts routes
+│   │   ├── workorder.routes.js     # /api/v1/workorders routes
+│   │   └── index.js                # Route aggregation
 │   ├── middleware/
-│   │   ├── error.middleware.ts     # Global error handler
-│   │   ├── validation.middleware.ts # Request validation
-│   │   └── logging.middleware.ts   # Request logging
-│   ├── utils/
-│   │   ├── formatters.ts           # Data formatting utilities
-│   │   ├── logger.ts               # Winston logger configuration
-│   │   └── errors.ts               # Custom error classes
-│   └── types/
-│       └── express.d.ts            # Express type extensions
+│   │   ├── error.middleware.js     # Global error handler
+│   │   ├── validation.middleware.js # Request validation
+│   │   └── logging.middleware.js   # Request logging
+│   └── utils/
+│       ├── formatters.js           # Data formatting utilities
+│       ├── logger.js               # Winston logger configuration
+│       └── errors.js               # Custom error classes
 ├── tests/
 │   ├── unit/
 │   │   ├── services/
@@ -55,7 +53,6 @@ server/
 │   └── integration/
 │       └── routes/
 ├── package.json
-├── tsconfig.json
 ├── .env.example
 └── README.md
 ```
@@ -159,31 +156,21 @@ server/
     "http-status-codes": "^2.3.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.2",
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.10.0",
-    "@types/cors": "^2.8.16",
-    "@types/compression": "^1.7.5",
-    "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
+    "nodemon": "^3.0.2",
     "jest": "^29.7.0",
-    "@types/jest": "^29.5.10",
     "supertest": "^6.3.3",
-    "@types/supertest": "^2.0.16",
-    "eslint": "^8.55.0",
-    "@typescript-eslint/eslint-plugin": "^6.13.1",
-    "@typescript-eslint/parser": "^6.13.1"
+    "eslint": "^8.55.0"
   }
 }
 ```
 
-## Entry Point (src/index.ts)
+## Entry Point (src/index.js)
 
-```typescript
-import app from './app';
-import { connectDatabase, closeDatabase } from './database';
-import { logger } from './utils/logger';
-import { config } from './config';
+```javascript
+const app = require('./app');
+const { connectDatabase, closeDatabase } = require('./database');
+const logger = require('./utils/logger');
+const config = require('./config');
 
 const PORT = config.port || 3001;
 
@@ -220,18 +207,18 @@ process.on('SIGINT', async () => {
 startServer();
 ```
 
-## Express App Configuration (src/app.ts)
+## Express App Configuration (src/app.js)
 
-```typescript
-import express, { Application } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import { errorMiddleware } from './middleware/error.middleware';
-import { loggingMiddleware } from './middleware/logging.middleware';
-import routes from './routes';
+```javascript
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const compression = require('compression');
+const { errorMiddleware } = require('./middleware/error.middleware');
+const { loggingMiddleware } = require('./middleware/logging.middleware');
+const routes = require('./routes');
 
-const app: Application = express();
+const app = express();
 
 // Security middleware
 app.use(helmet());
@@ -275,17 +262,15 @@ app.use((req, res) => {
 // Global error handler
 app.use(errorMiddleware);
 
-export default app;
+module.exports = app;
 ```
 
-## Configuration (src/config/index.ts)
+## Configuration (src/config/index.js)
 
-```typescript
-import dotenv from 'dotenv';
+```javascript
+require('dotenv').config();
 
-dotenv.config();
-
-export const config = {
+const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3001', 10),
 
@@ -315,6 +300,8 @@ export const config = {
   defaultPageSize: parseInt(process.env.DEFAULT_PAGE_SIZE || '100', 10),
   maxPageSize: parseInt(process.env.MAX_PAGE_SIZE || '500', 10),
 };
+
+module.exports = config;
 ```
 
 ## Environment Variables (.env.example)
@@ -347,51 +334,36 @@ MAX_PAGE_SIZE=500
 ```json
 {
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix"
+    "lint": "eslint src/**/*.js",
+    "lint:fix": "eslint src/**/*.js --fix"
   }
 }
 ```
 
-## TypeScript Configuration (tsconfig.json)
+## ESLint Configuration (.eslintrc.js)
 
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "commonjs",
-    "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "moduleResolution": "node",
-    "baseUrl": "./src",
-    "paths": {
-      "@/*": ["./*"],
-      "@config/*": ["config/*"],
-      "@database/*": ["database/*"],
-      "@models/*": ["models/*"],
-      "@services/*": ["services/*"],
-      "@controllers/*": ["controllers/*"],
-      "@routes/*": ["routes/*"],
-      "@middleware/*": ["middleware/*"],
-      "@utils/*": ["utils/*"]
-    }
+```javascript
+module.exports = {
+  env: {
+    node: true,
+    es2022: true,
+    jest: true,
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
-}
+  extends: ['eslint:recommended'],
+  parserOptions: {
+    ecmaVersion: 2022,
+    sourceType: 'module',
+  },
+  rules: {
+    'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    'no-console': 'warn',
+    'semi': ['error', 'always'],
+    'quotes': ['error', 'single'],
+  },
+};
 ```

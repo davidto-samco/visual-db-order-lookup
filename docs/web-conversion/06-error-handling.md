@@ -6,26 +6,21 @@ This document covers error handling strategies, custom error classes, HTTP statu
 
 ---
 
-## Custom Error Classes (src/utils/errors.ts)
+## Custom Error Classes (src/utils/errors.js)
 
-```typescript
-import { StatusCodes } from 'http-status-codes';
+```javascript
+const { StatusCodes } = require('http-status-codes');
 
 /**
  * Base application error
  */
-export class AppError extends Error {
-  public readonly statusCode: number;
-  public readonly code: string;
-  public readonly isOperational: boolean;
-  public readonly details?: Record<string, unknown>;
-
+class AppError extends Error {
   constructor(
-    message: string,
-    statusCode: number = StatusCodes.INTERNAL_SERVER_ERROR,
-    code: string = 'INTERNAL_ERROR',
-    isOperational: boolean = true,
-    details?: Record<string, unknown>
+    message,
+    statusCode = StatusCodes.INTERNAL_SERVER_ERROR,
+    code = 'INTERNAL_ERROR',
+    isOperational = true,
+    details = null
   ) {
     super(message);
     this.statusCode = statusCode;
@@ -35,15 +30,14 @@ export class AppError extends Error {
 
     // Maintains proper stack trace
     Error.captureStackTrace(this, this.constructor);
-    Object.setPrototypeOf(this, AppError.prototype);
   }
 }
 
 /**
  * Validation error (400 Bad Request)
  */
-export class ValidationError extends AppError {
-  constructor(message: string, details?: Record<string, unknown>) {
+class ValidationError extends AppError {
+  constructor(message, details = null) {
     super(message, StatusCodes.BAD_REQUEST, 'VALIDATION_ERROR', true, details);
   }
 }
@@ -51,8 +45,8 @@ export class ValidationError extends AppError {
 /**
  * Resource not found error (404)
  */
-export class NotFoundError extends AppError {
-  constructor(resource: string, identifier: string) {
+class NotFoundError extends AppError {
+  constructor(resource, identifier) {
     super(
       `${resource} not found: ${identifier}`,
       StatusCodes.NOT_FOUND,
@@ -66,8 +60,8 @@ export class NotFoundError extends AppError {
 /**
  * Order not found error
  */
-export class OrderNotFoundError extends NotFoundError {
-  constructor(jobNumber: string) {
+class OrderNotFoundError extends NotFoundError {
+  constructor(jobNumber) {
     super('Order', jobNumber);
     this.code = 'ORDER_NOT_FOUND';
   }
@@ -76,8 +70,8 @@ export class OrderNotFoundError extends NotFoundError {
 /**
  * Part not found error
  */
-export class PartNotFoundError extends NotFoundError {
-  constructor(partNumber: string) {
+class PartNotFoundError extends NotFoundError {
+  constructor(partNumber) {
     super('Part', partNumber);
     this.code = 'PART_NOT_FOUND';
   }
@@ -86,8 +80,8 @@ export class PartNotFoundError extends NotFoundError {
 /**
  * Work order not found error
  */
-export class WorkOrderNotFoundError extends AppError {
-  constructor(baseId: string, lotId: string, subId: string) {
+class WorkOrderNotFoundError extends AppError {
+  constructor(baseId, lotId, subId) {
     const identifier = `${baseId}-${subId}/${lotId}`;
     super(
       `Work order not found: ${identifier}`,
@@ -102,8 +96,8 @@ export class WorkOrderNotFoundError extends AppError {
 /**
  * Job not found error
  */
-export class JobNotFoundError extends NotFoundError {
-  constructor(jobNumber: string) {
+class JobNotFoundError extends NotFoundError {
+  constructor(jobNumber) {
     super('Job', jobNumber);
     this.code = 'JOB_NOT_FOUND';
   }
@@ -112,14 +106,14 @@ export class JobNotFoundError extends NotFoundError {
 /**
  * Database error (500)
  */
-export class DatabaseError extends AppError {
-  constructor(message: string, originalError?: Error) {
+class DatabaseError extends AppError {
+  constructor(message, originalError = null) {
     super(
       `Database error: ${message}`,
       StatusCodes.INTERNAL_SERVER_ERROR,
       'DATABASE_ERROR',
       true,
-      originalError ? { originalMessage: originalError.message } : undefined
+      originalError ? { originalMessage: originalError.message } : null
     );
   }
 }
@@ -127,60 +121,60 @@ export class DatabaseError extends AppError {
 /**
  * Database connection error
  */
-export class DatabaseConnectionError extends AppError {
-  constructor(message: string = 'Failed to connect to database') {
+class DatabaseConnectionError extends AppError {
+  constructor(message = 'Failed to connect to database') {
     super(message, StatusCodes.SERVICE_UNAVAILABLE, 'DATABASE_CONNECTION_ERROR', false);
   }
 }
 
 /**
  * Check if error is operational (expected) vs programming error
+ * @param {Error} error
+ * @returns {boolean}
  */
-export function isOperationalError(error: Error): boolean {
+function isOperationalError(error) {
   if (error instanceof AppError) {
     return error.isOperational;
   }
   return false;
 }
+
+module.exports = {
+  AppError,
+  ValidationError,
+  NotFoundError,
+  OrderNotFoundError,
+  PartNotFoundError,
+  WorkOrderNotFoundError,
+  JobNotFoundError,
+  DatabaseError,
+  DatabaseConnectionError,
+  isOperationalError,
+};
 ```
 
 ---
 
-## Error Middleware (src/middleware/error.middleware.ts)
+## Error Middleware (src/middleware/error.middleware.js)
 
-```typescript
-import { Request, Response, NextFunction } from 'express';
-import { StatusCodes } from 'http-status-codes';
-import { AppError, isOperationalError } from '../utils/errors';
-import { logger } from '../utils/logger';
-import { config } from '../config';
-
-/**
- * Error response structure
- */
-interface ErrorResponse {
-  success: false;
-  error: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-    stack?: string;
-  };
-}
+```javascript
+const { StatusCodes } = require('http-status-codes');
+const { AppError, isOperationalError } = require('../utils/errors');
+const logger = require('../utils/logger');
+const config = require('../config');
 
 /**
  * Global error handling middleware
+ * @param {Error} err
+ * @param {Request} req
+ * @param {Response} res
+ * @param {Function} next
  */
-export function errorMiddleware(
-  err: Error,
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void {
+function errorMiddleware(err, req, res, next) {
   // Log the error
   if (isOperationalError(err)) {
     logger.warn('Operational error:', {
-      code: (err as AppError).code,
+      code: err.code,
       message: err.message,
       path: req.path,
       method: req.method,
@@ -195,7 +189,7 @@ export function errorMiddleware(
   }
 
   // Build error response
-  const response: ErrorResponse = {
+  const response = {
     success: false,
     error: {
       code: 'INTERNAL_ERROR',
@@ -235,9 +229,11 @@ export function errorMiddleware(
 
 /**
  * 404 handler for unknown routes
+ * @param {Request} req
+ * @param {Response} res
  */
-export function notFoundHandler(req: Request, res: Response): void {
-  const response: ErrorResponse = {
+function notFoundHandler(req, res) {
+  const response = {
     success: false,
     error: {
       code: 'NOT_FOUND',
@@ -250,30 +246,37 @@ export function notFoundHandler(req: Request, res: Response): void {
 
 /**
  * Async handler wrapper to catch promise rejections
+ * @param {Function} fn - Async route handler
+ * @returns {Function}
  */
-export function asyncHandler(
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<any>
-) {
-  return (req: Request, res: Response, next: NextFunction) => {
+function asyncHandler(fn) {
+  return (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 }
+
+module.exports = {
+  errorMiddleware,
+  notFoundHandler,
+  asyncHandler,
+};
 ```
 
 ---
 
-## Validation Middleware (src/middleware/validation.middleware.ts)
+## Validation Middleware (src/middleware/validation.middleware.js)
 
-```typescript
-import { Request, Response, NextFunction } from 'express';
-import { validationResult, ValidationChain } from 'express-validator';
-import { ValidationError } from '../utils/errors';
+```javascript
+const { validationResult } = require('express-validator');
+const { ValidationError } = require('../utils/errors');
 
 /**
  * Validate request using express-validator chains
+ * @param {Array} validations - Array of validation chains
+ * @returns {Function}
  */
-export function validate(validations: ValidationChain[]) {
-  return async (req: Request, res: Response, next: NextFunction) => {
+function validate(validations) {
+  return async (req, res, next) => {
     // Run all validations
     await Promise.all(validations.map(validation => validation.run(req)));
 
@@ -289,18 +292,21 @@ export function validate(validations: ValidationChain[]) {
       message: err.msg,
     }));
 
-    throw new ValidationError('Validation failed', {
-      errors: formattedErrors,
-    });
+    next(new ValidationError('Validation failed', { errors: formattedErrors }));
   };
 }
 
-/**
- * Common validation chains
- */
-import { query, param } from 'express-validator';
+module.exports = { validate };
+```
 
-export const orderValidations = {
+---
+
+## Validation Chains (src/middleware/validators.js)
+
+```javascript
+const { query, param } = require('express-validator');
+
+const orderValidations = {
   jobNumber: param('jobNumber')
     .trim()
     .notEmpty()
@@ -331,7 +337,7 @@ export const orderValidations = {
     .withMessage('Customer name must not be empty'),
 };
 
-export const partValidations = {
+const partValidations = {
   partNumber: param('partNumber')
     .trim()
     .notEmpty()
@@ -343,7 +349,7 @@ export const partValidations = {
     .withMessage('Search pattern is required'),
 };
 
-export const workOrderValidations = {
+const workOrderValidations = {
   baseId: param('baseId')
     .trim()
     .notEmpty()
@@ -365,15 +371,21 @@ export const workOrderValidations = {
     .withMessage('Operation sequence number must be a non-negative integer')
     .toInt(),
 };
+
+module.exports = {
+  orderValidations,
+  partValidations,
+  workOrderValidations,
+};
 ```
 
 ---
 
-## Logger Configuration (src/utils/logger.ts)
+## Logger Configuration (src/utils/logger.js)
 
-```typescript
-import winston from 'winston';
-import { config } from '../config';
+```javascript
+const winston = require('winston');
+const config = require('../config');
 
 const { combine, timestamp, printf, colorize, errors } = winston.format;
 
@@ -399,7 +411,7 @@ const logFormat = printf(({ level, message, timestamp, stack, ...metadata }) => 
 /**
  * Create logger instance
  */
-export const logger = winston.createLogger({
+const logger = winston.createLogger({
   level: config.logLevel,
   format: combine(
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -436,30 +448,23 @@ if (config.nodeEnv === 'production') {
   );
 }
 
-/**
- * Create child logger with context
- */
-export function createLogger(context: string) {
-  return logger.child({ context });
-}
+module.exports = logger;
 ```
 
 ---
 
-## Request Logging Middleware (src/middleware/logging.middleware.ts)
+## Request Logging Middleware (src/middleware/logging.middleware.js)
 
-```typescript
-import { Request, Response, NextFunction } from 'express';
-import { logger } from '../utils/logger';
+```javascript
+const logger = require('../utils/logger');
 
 /**
  * Request logging middleware
+ * @param {Request} req
+ * @param {Response} res
+ * @param {Function} next
  */
-export function loggingMiddleware(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void {
+function loggingMiddleware(req, res, next) {
   const startTime = Date.now();
 
   // Log request
@@ -481,6 +486,8 @@ export function loggingMiddleware(
 
   next();
 }
+
+module.exports = { loggingMiddleware };
 ```
 
 ---
@@ -556,16 +563,16 @@ export function loggingMiddleware(
   "error": {
     "code": "INTERNAL_ERROR",
     "message": "Cannot read property 'id' of undefined",
-    "stack": "TypeError: Cannot read property 'id' of undefined\n    at OrderService.getOrderByJobNumber (/src/services/order.service.ts:45:12)\n    ..."
+    "stack": "TypeError: Cannot read property 'id' of undefined\n    at getOrderByJobNumber (/src/services/order.service.js:45:12)\n    ..."
   }
 }
 ```
 
 ---
 
-## Python to TypeScript Error Mapping
+## Python to JavaScript Error Mapping
 
-| Python Exception | TypeScript Error Class |
+| Python Exception | JavaScript Error Class |
 |------------------|------------------------|
 | `ValueError` | `ValidationError` |
 | `pyodbc.Error` | `DatabaseError` |
