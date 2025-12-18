@@ -214,6 +214,50 @@ class WorkOrderService:
             logger.error(error_msg)
             raise WorkOrderServiceError(error_msg) from e
 
+    def get_operation_children(self, base_id: str, lot_id: str, sub_id: str, operation_seq: int) -> List[dict]:
+        """Get flattened children for an operation (requirements AND child work order operations).
+
+        This returns a mixed list of requirements and child work order operations at the same level,
+        solving the hierarchy issue where child operations appeared nested under requirements.
+
+        Args:
+            base_id: Work order BASE_ID
+            lot_id: Work order LOT_ID
+            sub_id: Work order SUB_ID
+            operation_seq: Operation sequence number
+
+        Returns:
+            List of dictionaries with 'item_type' = 'REQUIREMENT' or 'CHILD_OPERATION'
+
+        Raises:
+            ValueError: If parameters are invalid
+            WorkOrderServiceError: If database query fails
+        """
+        # Validation
+        if base_id is None or lot_id is None or sub_id is None:
+            raise ValueError("Composite key cannot contain None")
+
+        if not isinstance(operation_seq, int) or operation_seq < 0:
+            raise ValueError("operation_seq must be a non-negative integer")
+
+        base_id = base_id.strip().upper()
+        lot_id = lot_id.strip().upper()
+        sub_id = sub_id.strip().upper()
+
+        logger.debug(f"Loading flattened operation children for operation {operation_seq}")
+
+        try:
+            cursor = self.db_connection.get_cursor()
+            children = work_order_queries.get_operation_children(cursor, base_id, lot_id, sub_id, operation_seq)
+            cursor.close()
+            logger.debug(f"Loaded {len(children)} flattened children")
+            return children
+
+        except pyodbc.Error as e:
+            error_msg = f"Database error loading operation children: {str(e)}"
+            logger.error(error_msg)
+            raise WorkOrderServiceError(error_msg) from e
+
     def get_requirements_by_sub_id(self, base_id: str, lot_id: str, sub_id: str) -> List[Requirement]:
         """Get all requirements for a work order by WORKORDER_SUB_ID (for tree building).
 

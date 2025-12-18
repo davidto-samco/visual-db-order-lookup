@@ -5,6 +5,7 @@ This module provides database query functions for work order hierarchy data:
 - get_work_order_header: Load header with aggregate counts
 - get_operations: Load operations for work order (lazy)
 - get_requirements: Load requirements for operation (lazy)
+- get_operation_children: Load flattened requirements + child operations (lazy, flattened mode)
 - get_labor_tickets: Load labor transactions (lazy)
 - get_inventory_transactions: Load material transactions (lazy)
 - get_wip_balance: Load WIP costs (lazy)
@@ -225,11 +226,16 @@ def get_operations(cursor: pyodbc.Cursor, base_id: str, lot_id: str, sub_id: str
     sub_id = sub_id.strip().upper()
 
     query = """
-        SELECT SEQUENCE_NO,
-               RESOURCE_ID,
-               SETUP_HRS,
-               RUN_HRS,
-               STATUS,
+        SELECT op.SEQUENCE_NO,
+               op.OPERATION_TYPE,
+               op.RESOURCE_ID,
+               op.SETUP_HRS,
+               op.RUN,
+               op.RUN_TYPE,
+               op.STATUS,
+               op.CALC_START_QTY,
+               op.CLOSE_DATE,
+               CAST(CAST(ob.BITS AS VARBINARY(MAX)) AS VARCHAR(MAX)) AS notes,
                -- Requirement count for this operation
                (SELECT COUNT(*) FROM REQUIREMENT WITH (NOLOCK)
                 WHERE WORKORDER_BASE_ID = ?
@@ -237,10 +243,15 @@ def get_operations(cursor: pyodbc.Cursor, base_id: str, lot_id: str, sub_id: str
                   AND WORKORDER_SUB_ID = ?
                   AND OPERATION_SEQ_NO = op.SEQUENCE_NO) AS requirement_count
         FROM OPERATION op WITH (NOLOCK)
-        WHERE WORKORDER_BASE_ID = ?
-          AND WORKORDER_LOT_ID = ?
-          AND WORKORDER_SUB_ID = ?
-        ORDER BY SEQUENCE_NO
+        LEFT JOIN OPERATION_BINARY ob WITH (NOLOCK)
+            ON op.WORKORDER_BASE_ID = ob.WORKORDER_BASE_ID
+            AND op.WORKORDER_LOT_ID = ob.WORKORDER_LOT_ID
+            AND op.WORKORDER_SUB_ID = ob.WORKORDER_SUB_ID
+            AND op.SEQUENCE_NO = ob.SEQUENCE_NO
+        WHERE op.WORKORDER_BASE_ID = ?
+          AND op.WORKORDER_LOT_ID = ?
+          AND op.WORKORDER_SUB_ID = ?
+        ORDER BY op.SEQUENCE_NO
     """
 
     logger.debug(f"Loading operations for: {base_id}/{lot_id}/{sub_id}")
@@ -255,12 +266,17 @@ def get_operations(cursor: pyodbc.Cursor, base_id: str, lot_id: str, sub_id: str
             workorder_lot_id=lot_id,
             workorder_sub_id=sub_id,
             sequence=row.SEQUENCE_NO,
+            operation_type=row.OPERATION_TYPE.strip() if row.OPERATION_TYPE else '',
             operation_id=row.RESOURCE_ID.strip() if row.RESOURCE_ID else '',
-            description='',  # DESCRIPTION column doesn't exist in OPERATION table
+            description=row.OPERATION_TYPE.strip() if row.OPERATION_TYPE else '',  # Use OPERATION_TYPE as description
             department_id=None,  # DEPARTMENT_ID doesn't exist in OPERATION table
             setup_hrs=Decimal(str(row.SETUP_HRS)) if row.SETUP_HRS is not None else Decimal('0'),
-            run_hrs=Decimal(str(row.RUN_HRS)) if row.RUN_HRS is not None else Decimal('0'),
+            run_hrs=Decimal(str(row.RUN)) if row.RUN is not None else Decimal('0'),
+            run_type=row.RUN_TYPE.strip() if row.RUN_TYPE else 'HRS/PC',
             status=row.STATUS.strip() if row.STATUS else None,
+            calc_start_qty=Decimal(str(row.CALC_START_QTY)) if row.CALC_START_QTY is not None else Decimal('0'),
+            close_date=row.CLOSE_DATE if isinstance(row.CLOSE_DATE, (date, datetime)) else None,
+            notes=row.notes.strip() if row.notes else None,
             requirement_count=row.requirement_count or 0,
         )
         operations.append(op)
@@ -367,6 +383,186 @@ def get_requirements(cursor: pyodbc.Cursor, base_id: str, lot_id: str, sub_id: s
     logger.info(f"Loaded {len(requirements)} requirements")
     logger.info(f"")
     return requirements
+
+
+def get_operation_children(cursor: pyodbc.Cursor, base_id: str, lot_id: str, sub_id: str, operation_seq: int) -> List[dict]:
+    """Get flattened children for an operation (requirements AND child work order operations as siblings).
+
+    This solves the hierarchy issue where child work order operations appeared nested under
+    the requirement instead of as siblings. Returns a mixed list of requirements and child operations.
+
+    Args:
+        cursor: Database cursor
+        base_id: Work order BASE_ID
+        lot_id: Work order LOT_ID
+        sub_id: Work order SUB_ID
+        operation_seq: Operation sequence number
+
+    Returns:
+        List of dictionaries with 'item_type' = 'REQUIREMENT' or 'CHILD_OPERATION'
+
+    Raises:
+        ValueError: If parameters are invalid
+        pyodbc.Error: If database query fails
+    """
+    if base_id is None or lot_id is None or sub_id is None:
+        raise ValueError("Composite key cannot contain None")
+
+    base_id = base_id.strip().upper()
+    lot_id = lot_id.strip().upper()
+    sub_id = sub_id.strip().upper()
+
+    query = """
+        -- Requirements for this operation
+        SELECT
+            'REQUIREMENT' AS item_type,
+            r.PART_ID AS item_id,
+            COALESCE(p.DESCRIPTION, CAST(CAST(rb.BITS AS VARBINARY(MAX)) AS VARCHAR(MAX))) AS item_description,
+            r.PIECE_NO AS sort_order_1,
+            0 AS sort_order_2,
+            r.QTY_PER,
+            r.FIXED_QTY,
+            r.SCRAP_PERCENT,
+            r.CALC_QTY,
+            r.STATUS AS req_status,
+            r.ISSUED_QTY,
+            r.REQUIRED_DATE,
+            r.CLOSE_DATE AS req_close_date,
+            r.OPERATION_SEQ_NO,
+            r.SUBORD_WO_SUB_ID,
+            wo.STATUS AS subord_wo_status,
+            wo.DESIRED_QTY AS subord_wo_qty,
+            wo.SCHED_START_DATE AS subord_wo_start_date,
+            wo.SCHED_FINISH_DATE AS subord_wo_finish_date,
+            NULL AS operation_type,
+            NULL AS resource_id,
+            NULL AS setup_hrs,
+            NULL AS run,
+            NULL AS run_type,
+            NULL AS CALC_START_QTY,
+            NULL AS operation_status,
+            NULL AS operation_close_date,
+            p.STOCK_UM,
+            CAST(CAST(rb.BITS AS VARBINARY(MAX)) AS VARCHAR(MAX)) AS notes
+        FROM REQUIREMENT r WITH (NOLOCK)
+        LEFT JOIN PART p WITH (NOLOCK) ON r.PART_ID = p.ID
+        LEFT JOIN WORK_ORDER wo WITH (NOLOCK)
+            ON r.WORKORDER_BASE_ID = wo.BASE_ID
+            AND r.WORKORDER_LOT_ID = wo.LOT_ID
+            AND r.SUBORD_WO_SUB_ID = wo.SUB_ID
+        LEFT JOIN REQUIREMENT_BINARY rb WITH (NOLOCK)
+            ON r.WORKORDER_BASE_ID = rb.WORKORDER_BASE_ID
+            AND r.WORKORDER_LOT_ID = rb.WORKORDER_LOT_ID
+            AND r.WORKORDER_SUB_ID = rb.WORKORDER_SUB_ID
+            AND r.OPERATION_SEQ_NO = rb.OPERATION_SEQ_NO
+            AND r.PIECE_NO = rb.PIECE_NO
+        WHERE r.WORKORDER_BASE_ID = ?
+          AND r.WORKORDER_LOT_ID = ?
+          AND r.WORKORDER_SUB_ID = ?
+          AND r.OPERATION_SEQ_NO = ?
+
+        UNION ALL
+
+        -- Child work order operations (appear at same level as their parent requirement)
+        SELECT
+            'CHILD_OPERATION' AS item_type,
+            CAST(op.SEQUENCE_NO AS VARCHAR) + ' ' + ISNULL(op.RESOURCE_ID, '') AS item_id,
+            op.OPERATION_TYPE AS item_description,
+            r.PIECE_NO AS sort_order_1,
+            op.SEQUENCE_NO AS sort_order_2,
+            NULL AS QTY_PER,
+            NULL AS FIXED_QTY,
+            NULL AS SCRAP_PERCENT,
+            NULL AS CALC_QTY,
+            NULL AS req_status,
+            NULL AS ISSUED_QTY,
+            NULL AS REQUIRED_DATE,
+            NULL AS req_close_date,
+            NULL AS OPERATION_SEQ_NO,
+            r.SUBORD_WO_SUB_ID,
+            NULL AS subord_wo_status,
+            NULL AS subord_wo_qty,
+            NULL AS subord_wo_start_date,
+            NULL AS subord_wo_finish_date,
+            op.OPERATION_TYPE,
+            op.RESOURCE_ID,
+            op.SETUP_HRS,
+            op.RUN,
+            op.RUN_TYPE,
+            op.CALC_START_QTY,
+            op.STATUS AS operation_status,
+            op.CLOSE_DATE AS operation_close_date,
+            NULL AS STOCK_UM,
+            CAST(CAST(ob.BITS AS VARBINARY(MAX)) AS VARCHAR(MAX)) AS notes
+        FROM REQUIREMENT r WITH (NOLOCK)
+        INNER JOIN OPERATION op WITH (NOLOCK)
+            ON r.WORKORDER_BASE_ID = op.WORKORDER_BASE_ID
+            AND r.WORKORDER_LOT_ID = op.WORKORDER_LOT_ID
+            AND r.SUBORD_WO_SUB_ID = op.WORKORDER_SUB_ID
+        LEFT JOIN OPERATION_BINARY ob WITH (NOLOCK)
+            ON op.WORKORDER_BASE_ID = ob.WORKORDER_BASE_ID
+            AND op.WORKORDER_LOT_ID = ob.WORKORDER_LOT_ID
+            AND op.WORKORDER_SUB_ID = ob.WORKORDER_SUB_ID
+            AND op.SEQUENCE_NO = ob.SEQUENCE_NO
+        WHERE r.WORKORDER_BASE_ID = ?
+          AND r.WORKORDER_LOT_ID = ?
+          AND r.WORKORDER_SUB_ID = ?
+          AND r.OPERATION_SEQ_NO = ?
+          AND r.SUBORD_WO_SUB_ID IS NOT NULL
+
+        ORDER BY sort_order_1, sort_order_2
+    """
+
+    logger.debug(f"Loading flattened operation children for operation {operation_seq}")
+
+    cursor.execute(query, (base_id, lot_id, sub_id, operation_seq,
+                           base_id, lot_id, sub_id, operation_seq))
+    rows = cursor.fetchall()
+
+    results = []
+    logger.info(f"")
+    logger.info(f"FLATTENED QUERY RESULTS for operation {operation_seq}:")
+    logger.info(f"  Found {len(rows)} items from database")
+
+    for row in rows:
+        item_type = row.item_type
+        item_display = row.item_id.strip() if row.item_id else 'NO_ID'
+        logger.info(f"  - Type: {item_type}, ID: {item_display}")
+
+        results.append({
+            'item_type': item_type,
+            'item_id': row.item_id.strip() if row.item_id else '',
+            'item_description': row.item_description.strip() if row.item_description else '',
+            'piece_no': row.sort_order_1 if row.sort_order_1 else None,
+            'qty_per': Decimal(str(row.QTY_PER)) if row.QTY_PER is not None else Decimal('0'),
+            'fixed_qty': Decimal(str(row.FIXED_QTY)) if row.FIXED_QTY is not None else Decimal('0'),
+            'scrap_percent': Decimal(str(row.SCRAP_PERCENT)) if row.SCRAP_PERCENT is not None else Decimal('0'),
+            'calc_qty': Decimal(str(row.CALC_QTY)) if row.CALC_QTY is not None else Decimal('0'),
+            'req_status': row.req_status.strip() if row.req_status else None,
+            'issued_qty': Decimal(str(row.ISSUED_QTY)) if row.ISSUED_QTY is not None else Decimal('0'),
+            'required_date': row.REQUIRED_DATE if isinstance(row.REQUIRED_DATE, (date, datetime)) else None,
+            'req_close_date': row.req_close_date if isinstance(row.req_close_date, (date, datetime)) else None,
+            'operation_seq_no': row.OPERATION_SEQ_NO,
+            'subord_wo_sub_id': row.SUBORD_WO_SUB_ID.strip() if row.SUBORD_WO_SUB_ID else None,
+            'subord_wo_status': row.subord_wo_status.strip() if row.subord_wo_status else None,
+            'subord_wo_qty': Decimal(str(row.subord_wo_qty)) if row.subord_wo_qty is not None else Decimal('0'),
+            'subord_wo_start_date': row.subord_wo_start_date if isinstance(row.subord_wo_start_date, (date, datetime)) else None,
+            'subord_wo_finish_date': row.subord_wo_finish_date if isinstance(row.subord_wo_finish_date, (date, datetime)) else None,
+            'operation_type': row.operation_type.strip() if row.operation_type else None,
+            'resource_id': row.resource_id.strip() if row.resource_id else None,
+            'setup_hrs': Decimal(str(row.setup_hrs)) if row.setup_hrs is not None else Decimal('0'),
+            'run_hrs': Decimal(str(row.run)) if row.run is not None else Decimal('0'),
+            'run_type': row.run_type.strip() if row.run_type else 'HRS/PC',
+            'calc_start_qty': Decimal(str(row.CALC_START_QTY)) if row.CALC_START_QTY is not None else Decimal('0'),
+            'operation_status': row.operation_status.strip() if row.operation_status else None,
+            'operation_close_date': row.operation_close_date if isinstance(row.operation_close_date, (date, datetime)) else None,
+            'unit_of_measure': row.STOCK_UM.strip() if row.STOCK_UM else None,
+            'notes': row.notes.strip() if row.notes else None,
+        })
+
+    logger.info(f"Loaded {len(results)} flattened children (requirements + child operations)")
+    logger.info(f"")
+    return results
 
 
 def get_requirements_by_sub_id(cursor: pyodbc.Cursor, base_id: str, lot_id: str, sub_id: str) -> List[Requirement]:

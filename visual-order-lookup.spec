@@ -45,6 +45,10 @@ a = Analysis(
         'pyodbc',
         'jinja2',
         'dotenv',
+        # Credential storage
+        'keyring',
+        'keyring.backends',
+        'keyring.backends.Windows',
     ],
     hookspath=[],
     hooksconfig={},

@@ -120,12 +120,11 @@ class EngineeringModule(QWidget):
 
         toolbar.addSeparator()
 
-        # TODO: Temporarily disabled - detailed view not working correctly
-        # self.toggle_view_action = QAction("Detailed View", self)
-        # self.toggle_view_action.setCheckable(True)
-        # self.toggle_view_action.setChecked(False)  # Start in simplified view
-        # self.toggle_view_action.triggered.connect(self._on_toggle_view)
-        # toolbar.addAction(self.toggle_view_action)
+        self.toggle_view_action = QAction("Detailed View", self)
+        self.toggle_view_action.setCheckable(True)
+        self.toggle_view_action.setChecked(False)  # Start in simplified view
+        self.toggle_view_action.triggered.connect(self._on_toggle_view)
+        toolbar.addAction(self.toggle_view_action)
 
         tree_layout.addWidget(toolbar)
 

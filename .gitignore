@@ -63,6 +63,12 @@ coverage.xml
 # Development/exploration scripts
 scripts/database_exploration/
 
+# Test/diagnostic files
+test_*.py
+diagnostic_check.py
+diagnostic.spec
+test-portable/
+
 # Logs
 *.log
 

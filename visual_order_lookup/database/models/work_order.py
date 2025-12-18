@@ -161,7 +161,8 @@ class Operation:
 
     # Operation identification
     sequence: int  # SEQUENCE (smallint) - operation sequence number
-    operation_id: str  # OPERATION_ID (varchar 30)
+    operation_type: str  # OPERATION_TYPE (varchar 30) - operation type code
+    operation_id: str  # OPERATION_ID (varchar 30) - resource ID
     description: str  # DESCRIPTION (varchar 255)
 
     # Department/routing
@@ -170,9 +171,17 @@ class Operation:
     # Time standards
     setup_hrs: Decimal = Decimal('0')  # SETUP_HRS - setup time
     run_hrs: Decimal = Decimal('0')  # RUN_HRS - run time per unit
+    run_type: str = 'HRS/PC'  # RUN_TYPE - run time unit type (HRS/PC, MIN/PC, etc.)
+
+    # Quantity
+    calc_start_qty: Decimal = Decimal('0')  # CALC_START_QTY - calculated start quantity
 
     # Status
     status: Optional[str] = None  # Operation status
+    close_date: Optional[date] = None  # CLOSE_DATE - when operation was completed
+
+    # Notes from OPERATION_BINARY table
+    notes: Optional[str] = None  # NOTES field from OPERATION_BINARY.BITS
 
     # Aggregate count for lazy loading
     requirement_count: int = 0
@@ -205,26 +214,42 @@ class Operation:
     def formatted_details(self) -> str:
         """Format detailed status and hours for display in column 3.
 
-        Detailed view format matching manufacturing-expand.png:
-        - Shows status and hours information
-        - Example: "S/O 0.00 Hrs, 0.00 HRS/PC, Qty 1.0000"
+        Detailed view format matching 6671-full.png:
+        - Format: "S/U {setup} Hrs, {run} {run_type}, Qty {qty}"
+        - Example: "S/U 0.00 Hrs, 0.00 HRS/PC, Qty 5.0000"
+        - Example: "S/U 0.00 Hrs, 20.00 MIN/PC, Qty 5.0000"
+        - Uses CALC_START_QTY from OPERATION table
+        - RUN column already stores the value in the unit specified by RUN_TYPE (no conversion needed)
 
         Returns:
-            Formatted details string with status and hours
+            Formatted details string with setup, run hours, and quantity
         """
-        status = self.status or 'N/A'
         setup = self.setup_hrs if self.setup_hrs else Decimal('0')
         run = self.run_hrs if self.run_hrs else Decimal('0')
+        qty = self.calc_start_qty if self.calc_start_qty else Decimal('0')
+        run_type = self.run_type if self.run_type else 'HRS/PC'
 
-        return f"{status} {setup:.2f} Hrs, {run:.2f} HRS/PC"
+        # RUN column is already in the correct unit (MIN/PC or HRS/PC) - no conversion needed
+        # Format: S/U {setup} Hrs, {run} {run_type}, Qty {qty}
+        return f"S/U {setup:.2f} Hrs, {run:.2f} {run_type}, Qty {qty:.4f}"
 
     def formatted_display(self) -> str:
         """Full display format for tree node.
 
+        Format: {sequence} {resource_id} [{operation_type_description}]
+        Example: "9 950 [REWORK ENG]"
+
+        If no operation_type/description, omit the brackets entirely.
+
         Returns:
             Complete operation display string
         """
-        return f"{self.formatted_description()} - {self.formatted_hours()}"
+        display_text = self.description if self.description else self.operation_type
+        if display_text:
+            return f"{self.sequence} {self.operation_id} [{display_text}]"
+        else:
+            # No operation type - just show sequence and resource_id
+            return f"{self.sequence} {self.operation_id}"
 
 
 @dataclass
@@ -317,10 +342,11 @@ class Requirement:
             status_prefix = f"[{self.subord_wo_status[0].upper()}]" if self.subord_wo_status else "[?]"
             wo_id = f"{self.workorder_base_id}-{self.subord_wo_sub_id}/{self.workorder_lot_id}"
 
-            # Only show part info if PART_ID exists
+            # Only show part info if PART_ID exists and is not empty
             if self.part_id and self.part_id.strip():
                 return f"{status_prefix} {wo_id} - {self.formatted_part()}"
             else:
+                # No part ID - just show work order ID
                 return f"{status_prefix} {wo_id}"
         else:
             # Regular part requirement

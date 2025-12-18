@@ -9,6 +9,10 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QHBoxLayout,
+    QLineEdit,
+    QFormLayout,
+    QCheckBox,
+    QGroupBox,
 )
 from PyQt6.QtCore import Qt
 
@@ -55,6 +59,146 @@ class LoadingDialog(QDialog):
             message: New message to display
         """
         self.label.setText(message)
+
+
+class LoginDialog(QDialog):
+    """Modal dialog for database login credentials."""
+
+    def __init__(self, parent=None):
+        """
+        Initialize login dialog.
+
+        Args:
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.setWindowTitle("Database Login")
+        self.setModal(True)
+        self.setFixedWidth(450)
+        self.credentials = None
+        self.remember_credentials = False
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Set up user interface."""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+
+        # Header label
+        header = QLabel("Connect to Visual Database")
+        header.setStyleSheet("font-size: 14pt; font-weight: bold;")
+        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(header)
+
+        # Info label
+        info = QLabel("Enter your database credentials to continue.")
+        info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        info.setStyleSheet("color: #666;")
+        layout.addWidget(info)
+
+        # Form group
+        form_group = QGroupBox("Database Connection")
+        form_layout = QFormLayout()
+        form_layout.setSpacing(10)
+
+        # Server input
+        self.server_input = QLineEdit()
+        self.server_input.setPlaceholderText("e.g., 10.10.10.142,1433")
+        self.server_input.setText("10.10.10.142,1433")
+        form_layout.addRow("Server:", self.server_input)
+
+        # Database input
+        self.database_input = QLineEdit()
+        self.database_input.setPlaceholderText("e.g., SAMCO")
+        self.database_input.setText("SAMCO")
+        form_layout.addRow("Database:", self.database_input)
+
+        # Username input
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Database username")
+        form_layout.addRow("Username:", self.username_input)
+
+        # Password input
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password_input.setPlaceholderText("Database password")
+        form_layout.addRow("Password:", self.password_input)
+
+        form_group.setLayout(form_layout)
+        layout.addWidget(form_group)
+
+        # Remember credentials checkbox
+        self.remember_checkbox = QCheckBox("Remember credentials (stored securely)")
+        layout.addWidget(self.remember_checkbox)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_button)
+
+        self.login_button = QPushButton("Connect")
+        self.login_button.setDefault(True)
+        self.login_button.clicked.connect(self.handle_login)
+        self.login_button.setStyleSheet(
+            "QPushButton { background-color: #0078d4; color: white; padding: 6px 20px; }"
+            "QPushButton:hover { background-color: #106ebe; }"
+        )
+        button_layout.addWidget(self.login_button)
+
+        layout.addLayout(button_layout)
+
+        # Connect Enter key to login
+        self.password_input.returnPressed.connect(self.handle_login)
+
+    def handle_login(self):
+        """Handle login button click."""
+        server = self.server_input.text().strip()
+        database = self.database_input.text().strip()
+        username = self.username_input.text().strip()
+        password = self.password_input.text()
+
+        # Validate inputs
+        if not all([server, database, username, password]):
+            QMessageBox.warning(
+                self,
+                "Missing Information",
+                "Please fill in all fields to continue."
+            )
+            return
+
+        # Store credentials
+        self.credentials = {
+            'server': server,
+            'database': database,
+            'username': username,
+            'password': password
+        }
+        self.remember_credentials = self.remember_checkbox.isChecked()
+
+        # Accept dialog
+        self.accept()
+
+    def get_credentials(self):
+        """
+        Get entered credentials.
+
+        Returns:
+            dict: Dictionary containing server, database, username, password
+            or None if dialog was cancelled
+        """
+        return self.credentials
+
+    def get_remember_choice(self):
+        """
+        Get whether user wants to remember credentials.
+
+        Returns:
+            bool: True if credentials should be remembered
+        """
+        return self.remember_credentials
 
 
 class ErrorHandler:
